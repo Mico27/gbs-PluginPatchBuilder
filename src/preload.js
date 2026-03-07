@@ -5,4 +5,6 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   selectFolder: () => ipcRenderer.invoke('select-folder'),
+  updatePlugins: (data) => ipcRenderer.invoke('update-plugins', data),
+  onUpdateProgress: (callback) => ipcRenderer.on('update-progress', (_, data) => callback(data)),
 });

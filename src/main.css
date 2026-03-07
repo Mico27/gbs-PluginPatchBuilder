@@ -1,0 +1,225 @@
+/* Blueprint Theme - Professional Dark IDE Theme */
+
+:root {
+  --blueprint-primary: #016fdf;
+  --blueprint-primary-dark: #01579b;
+  --blueprint-highlight: #6d9a43;
+  --blueprint-background: #222222;
+  --blueprint-card-bg: #292929;
+  --blueprint-sidebar-bg: #1c1c1c;
+  --blueprint-text-primary: #bfbfbf;
+  --blueprint-text-secondary: #777777;
+  --blueprint-text-button: #abb2bf;
+  --blueprint-border: #343434;
+  --blueprint-border-dark: #181a1f;
+  --blueprint-input-bg: #101210;
+  --blueprint-input-hover: #181818;
+  --blueprint-input-active: #111;
+  --blueprint-button-bg: #111111;
+  --blueprint-button-active: #14151a;
+  --blueprint-menu-bg: #393939;
+  --blueprint-divider: #323842;
+}
+
+body {
+  background: var(--blueprint-background);
+  color: var(--blueprint-text-primary);
+  font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 20px;
+  min-height: 100vh;
+}
+
+/* Main Page Container */
+.update-plugins-page {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 30px;
+  background: var(--blueprint-card-bg);
+  border: 1px solid var(--blueprint-border);
+  border-radius: 2px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+}
+
+.update-plugins-page h2 {
+  margin: 0 0 30px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--blueprint-text-primary);
+  text-shadow: none;
+  letter-spacing: normal;
+  text-transform: none;
+  border-bottom: 1px solid var(--blueprint-border);
+  padding-bottom: 15px;
+}
+
+/* Checkbox Container */
+.checkbox-container {
+  margin-bottom: 30px;
+  padding: 15px;
+  background: var(--blueprint-input-bg);
+  border: 1px solid var(--blueprint-border);
+  border-radius: 2px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--blueprint-text-primary);
+  user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-right: 10px;
+  border: 1px solid var(--blueprint-border);
+  border-radius: 2px;
+  background: var(--blueprint-button-bg);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.checkbox-label input[type="checkbox"]:hover {
+  border-color: var(--blueprint-primary);
+}
+
+.checkbox-label input[type="checkbox"]:checked {
+  background: var(--blueprint-primary);
+  border-color: var(--blueprint-primary);
+}
+
+.checkbox-label input[type="checkbox"]:checked::after {
+  content: '✓';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: 12px;
+}
+
+/* Folder Selector Component */
+.folder-selector-container {
+  margin-bottom: 25px;
+  padding: 18px;
+  border: 1px solid var(--blueprint-border);
+  border-radius: 2px;
+  background: var(--blueprint-card-bg);
+  transition: all 0.2s ease;
+}
+
+.folder-selector-container:hover {
+  border-color: var(--blueprint-primary);
+  background: var(--blueprint-input-hover);
+}
+
+.folder-selector-label {
+  display: block;
+  margin-bottom: 10px;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--blueprint-text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.folder-selector-input-group {
+  display: flex;
+  gap: 10px;
+}
+
+.folder-selector-input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--blueprint-border);
+  border-radius: 2px;
+  font-size: 12px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  background: var(--blueprint-input-bg);
+  color: var(--blueprint-text-button);
+  transition: all 0.2s ease;
+}
+
+.folder-selector-input::placeholder {
+  color: var(--blueprint-text-secondary);
+}
+
+.folder-selector-input:focus {
+  outline: none;
+  border-color: var(--blueprint-primary);
+  background: var(--blueprint-input-active);
+}
+
+.folder-selector-button {
+  padding: 10px 16px;
+  background: var(--blueprint-button-bg);
+  color: var(--blueprint-text-button);
+  border: 1px solid var(--blueprint-border);
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: all 0.2s ease;
+}
+
+.folder-selector-button:hover {
+  background: var(--blueprint-button-active);
+  border-color: var(--blueprint-primary);
+  color: white;
+}
+
+.folder-selector-button:active {
+  background: var(--blueprint-input-active);
+}
+
+/* Update Button */
+.update-button {
+  width: 100%;
+  margin-top: 30px;
+  padding: 12px 20px;
+  background: var(--blueprint-primary);
+  color: white;
+  border: 1px solid var(--blueprint-primary);
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
+}
+
+.update-button:hover {
+  background: var(--blueprint-primary-dark);
+  border-color: var(--blueprint-primary-dark);
+}
+
+.update-button:active {
+  background: var(--blueprint-button-active);
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--blueprint-sidebar-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--blueprint-border);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--blueprint-primary);
+}
