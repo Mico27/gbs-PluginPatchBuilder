@@ -1,22 +1,40 @@
 {
-  "name": "gbs-pluginpatchbuilder",
+  "name": "gbs-plugin-patch-builder",
+  "productName": "gbs-plugin-patch-builder",
   "version": "1.0.0",
-  "description": "Utility tool for updating GBStudio plugins",
-  "main": "main.js",
+  "description": "My Electron application description",
+  "main": ".webpack/main",
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "publish": "electron-forge publish",
+    "lint": "echo \"No linting configured\""
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Mico27/gbs-PluginPatchBuilder.git"
+  "keywords": [],
+  "author": {
+    "name": "Mico27",
+    "email": "mickaelfortier616@msn.com"
   },
-  "author": "Mico27",
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/Mico27/gbs-PluginPatchBuilder/issues"
-  },
-  "homepage": "https://github.com/Mico27/gbs-PluginPatchBuilder#readme",
   "devDependencies": {
-    "electron": "^40.8.0"
+    "@electron-forge/cli": "^7.11.1",
+    "@electron-forge/maker-deb": "^7.11.1",
+    "@electron-forge/maker-rpm": "^7.11.1",
+    "@electron-forge/maker-squirrel": "^7.11.1",
+    "@electron-forge/maker-zip": "^7.11.1",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.11.1",
+    "@electron-forge/plugin-fuses": "^7.11.1",
+    "@electron-forge/plugin-webpack": "^7.11.1",
+    "@electron/fuses": "^1.8.0",
+    "@vercel/webpack-asset-relocator-loader": "^1.7.3",
+    "css-loader": "^6.11.0",
+    "electron": "40.8.0",
+    "node-loader": "^2.1.0",
+    "style-loader": "^3.3.4"
+  },
+  "dependencies": {
+    "electron-squirrel-startup": "^1.0.1"
   }
 }
