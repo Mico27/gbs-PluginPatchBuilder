@@ -19,6 +19,8 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@babel/preset-react": "^7.28.5",
     "@electron-forge/cli": "^7.11.1",
     "@electron-forge/maker-deb": "^7.11.1",
     "@electron-forge/maker-rpm": "^7.11.1",
@@ -29,12 +31,16 @@
     "@electron-forge/plugin-webpack": "^7.11.1",
     "@electron/fuses": "^1.8.0",
     "@vercel/webpack-asset-relocator-loader": "^1.7.3",
+    "babel-loader": "^10.1.0",
     "css-loader": "^6.11.0",
     "electron": "40.8.0",
     "node-loader": "^2.1.0",
     "style-loader": "^3.3.4"
   },
   "dependencies": {
-    "electron-squirrel-startup": "^1.0.1"
+    "electron-squirrel-startup": "^1.0.1",
+    "node-diff3": "^3.2.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
   }
 }

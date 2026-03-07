@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('node:path');
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -36,6 +36,14 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+// Handle folder selection
+ipcMain.handle('select-folder', async () => {
+  const result = await dialog.showOpenDialog(BrowserWindow.getAllWindows()[0], {
+    properties: ['openDirectory']
+  });
+  return result.canceled ? null : result.filePaths[0];
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common
