@@ -1,0 +1,22 @@
+{
+  "name": "gbs-pluginpatchbuilder",
+  "version": "1.0.0",
+  "description": "Utility tool for updating GBStudio plugins",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mico27/gbs-PluginPatchBuilder.git"
+  },
+  "author": "Mico27",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Mico27/gbs-PluginPatchBuilder/issues"
+  },
+  "homepage": "https://github.com/Mico27/gbs-PluginPatchBuilder#readme",
+  "devDependencies": {
+    "electron": "^40.8.0"
+  }
+}
