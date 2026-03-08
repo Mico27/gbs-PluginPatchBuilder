@@ -11,6 +11,7 @@ export const UpdatePluginsPage = () => {
   const [pluginsFolder, setPluginsFolder] = React.useState('');
   const [updatedPluginsFolderOutput, setUpdatedPluginsFolderOutput] = React.useState('');
   const [progress, setProgress] = React.useState({ plugin: '', file: '' });
+  const [createCompabilityPatches, setCreateCompabilityPatches] = React.useState(false);
 
   React.useEffect(() => {
     if (window.electronAPI && window.electronAPI.onUpdateProgress) {
@@ -22,8 +23,8 @@ export const UpdatePluginsPage = () => {
 
   const handleUpdate = async () => {
     const data = engineChanged
-      ? { engineChanged, previousEngineFolder, newEngineFolder, pluginsFolder, updatedPluginsFolderOutput }
-      : { engineChanged, engineFolder, pluginsFolder, updatedPluginsFolderOutput };
+      ? { engineChanged, previousEngineFolder, newEngineFolder, pluginsFolder, updatedPluginsFolderOutput, createCompabilityPatches }
+      : { engineChanged, engineFolder, pluginsFolder, updatedPluginsFolderOutput, createCompabilityPatches };
     try {
       const result = await UpdatePluginHelper.updatePlugins(data);
       console.log('Plugins updated result', result);
@@ -44,6 +45,17 @@ export const UpdatePluginsPage = () => {
             onChange={(e) => setEngineChanged(e.target.checked)}
           />
           <span>Engine Changed</span>
+        </label>
+      </div>
+
+      <div className="checkbox-container">
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={createCompabilityPatches}
+            onChange={(e) => setCreateCompabilityPatches(e.target.checked)}
+          />
+          <span>Create Compability Patches</span>
         </label>
       </div>
 
