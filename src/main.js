@@ -48,7 +48,7 @@ ipcMain.handle('select-folder', async () => {
 
 // Handle plugin updating, producing diff patches
 ipcMain.handle('update-plugins', async (_, data) => {
-  const { engineChanged, engineFolder, previousEngineFolder, newEngineFolder, pluginsFolder, updatedPluginsFolderOutput, createCompabilityPatches } = data;
+  const { engineChanged, engineFolder, previousEngineFolder, newEngineFolder, pluginsFolder, updatedPluginsFolderOutput, createEngineAlts } = data;
   // when the engine has changed, compare plugin files against the *new* engine
   const baseFolder = engineChanged ? newEngineFolder : engineFolder;
   const diff3 = require('node-diff3');
@@ -104,6 +104,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
   try {
     let conflicts = [];
     let modifiedEngineFiles = new Map(); // Track which plugins modified which engine files
+    let modifiedEngineAltFiles = new Map(); // Track which plugins modified which engine alt files
     
     // If engine changed, prepare for three-way merge
     let previousEngineFiles = new Map();
@@ -238,8 +239,8 @@ ipcMain.handle('update-plugins', async (_, data) => {
                 if (!modifiedEngineFiles.has(relative)) {
                   modifiedEngineFiles.set(relative, []);
                 }
-                modifiedEngineFiles.get(relative).push(pluginInfo.fullName);
-                
+                modifiedEngineFiles.get(relative).push({ plugin: pluginInfo.fullName, content: pluginContent });
+
                 // Copy original plugin file
                 const outPath = path.join(outputPluginPath, 'engine', relative);
                 await fs.mkdir(path.dirname(outPath), { recursive: true });
@@ -256,7 +257,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
                 if (!modifiedEngineFiles.has(relative)) {
                   modifiedEngineFiles.set(relative, []);
                 }
-                modifiedEngineFiles.get(relative).push(pluginInfo.fullName);
+                modifiedEngineFiles.get(relative).push({ plugin: pluginInfo.fullName, content: mergedContent });
               }
             } catch (err) {
               console.warn('Error merging file', relative, err.message);
@@ -280,9 +281,111 @@ ipcMain.handle('update-plugins', async (_, data) => {
             console.log('No engine files for merge:', relative, '- copied as-is');
           }
         }
+        
+
+
+
+        // If engine changed, also process engineAlt folder for three-way merge
+        const engineAltPath = path.join(pluginPath, 'engineAlt');
+        let engineAltDirs = [];
+        try {
+          const altDirEntries = await fs.readdir(engineAltPath, { withFileTypes: true });
+          engineAltDirs = altDirEntries.filter(d => d.isDirectory()).map(d => d.name);
+        } catch (err) {
+          // No engineAlt folder, skip
+          console.log('No engineAlt folder for', pluginInfo.fullName);
+        }
+        
+        for (const compatFolderName of engineAltDirs) {
+          const engineAltFilePath = path.join(engineAltPath, compatFolderName);
+          let altFiles = [];
+          try {
+            altFiles = await gatherFiles(engineAltFilePath);
+          } catch (err) {
+            console.warn('Could not read engineAlt folder for', pluginInfo.fullName, compatFolderName);
+            continue;
+          }
+          
+          for (const filePath of altFiles) {
+            const relative = path.relative(engineAltFilePath, filePath);
+            
+            const win = BrowserWindow.getAllWindows()[0];
+            if (win) {
+              win.webContents.send('update-progress', { plugin: pluginInfo.fullName, file: `engineAlt/${compatFolderName}/${relative}` });
+            }
+            
+            const previousEngineContent = previousEngineFiles.get(relative);
+            const newEngineContent = newEngineFiles.get(relative);
+            
+            if (previousEngineContent && newEngineContent) {
+              try {
+                // Read alt file
+                const altContent = await fs.readFile(filePath, 'utf8');
+                
+                // Perform three-way merge: ours=new, base=previous, theirs=alt
+                const mergeResult = diff3.diff3Merge(newEngineContent.split(/\r?\n/), previousEngineContent.split(/\r?\n/), altContent.split(/\r?\n/));
+                
+                // Check for conflicts
+                const hasConflicts = mergeResult.some(part => part.conflict);
+                
+                if (hasConflicts) {
+                  // Extract conflict details
+                  const conflictDetails = mergeResult
+                    .filter(part => part.conflict)
+                    .map(part => {
+                      const conflict = part.conflict;
+                      return `<<<<<<< NEW ENGINE\n${conflict.a}\n=======\n${conflict.o}\n>>>>>>> ALT\n${conflict.b}\n>>>>>>>`;
+                    })
+                    .join('\n---\n');
+                  
+                  // Record conflicts with details
+                  conflicts.push({
+                    plugin: pluginInfo.fullName,
+                    file: `engineAlt/${compatFolderName}/${relative}`,
+                    reason: 'Merge conflicts detected',
+                    details: conflictDetails
+                  });
+                  console.warn('Merge conflicts for engineAlt/', compatFolderName, '/', relative, '- copying original');
+                  
+                  // Copy original alt file
+                  const outPath = path.join(outputPluginPath, 'engineAlt', compatFolderName, relative);
+                  await fs.mkdir(path.dirname(outPath), { recursive: true });
+                  await fs.writeFile(outPath, altContent);
+                } else {
+                  // No conflicts, save merged result
+                  const mergedContent = mergeResult[0].ok.join('\n');
+                  const outPath = path.join(outputPluginPath, 'engineAlt', compatFolderName, relative);
+                  await fs.mkdir(path.dirname(outPath), { recursive: true });
+                  await fs.writeFile(outPath, mergedContent);
+                  console.log('Merged engine changes into engineAlt/', compatFolderName, '/', relative);
+                }
+              } catch (err) {
+                console.warn('Error merging engineAlt file', relative, err.message);
+                conflicts.push({
+                  plugin: pluginInfo.fullName,
+                  file: `engineAlt/${compatFolderName}/${relative}`,
+                  reason: `Merge error: ${err.message}`
+                });
+                // Copy original file
+                const altContent = await fs.readFile(filePath);
+                const outPath = path.join(outputPluginPath, 'engineAlt', compatFolderName, relative);
+                await fs.mkdir(path.dirname(outPath), { recursive: true });
+                await fs.writeFile(outPath, altContent);
+              }
+            } else {
+              // No corresponding engine files, copy alt file as-is
+              const altContent = await fs.readFile(filePath);
+              const outPath = path.join(outputPluginPath, 'engineAlt', compatFolderName, relative);
+              await fs.mkdir(path.dirname(outPath), { recursive: true });
+              await fs.writeFile(outPath, altContent);
+              console.log('No engine files for engineAlt merge:', compatFolderName, '/', relative, '- copied as-is');
+            }
+          }
+        }
       } else {
         // Original logic: compare plugin files against engine
         const enginePath = path.join(pluginPath, 'engine');
+        const engineAltPath = path.join(pluginPath, 'engineAlt');
         await copyDir(pluginPath, outputPluginPath, [enginePath]);
         console.log('Copied plugin structure (excluding engine) for', pluginInfo.fullName);
         
@@ -346,22 +449,98 @@ ipcMain.handle('update-plugins', async (_, data) => {
             if (!modifiedEngineFiles.has(relative)) {
               modifiedEngineFiles.set(relative, []);
             }
-            modifiedEngineFiles.get(relative).push(pluginInfo.fullName);
+            modifiedEngineFiles.get(relative).push({ plugin: pluginInfo.fullName, content: pluginContent });
             
-            // If createCompabilityPatches is enabled and this file was modified by previous plugins
-            if (createCompabilityPatches && modifiedEngineFiles.get(relative).length > 1) {
+            // If createEngineAlts is enabled and this file was modified by previous plugins
+            if (createEngineAlts && modifiedEngineFiles.get(relative).length > 1) {
               // Get list of all plugins that modified this file (excluding current)
-              let previousPlugins = modifiedEngineFiles.get(relative).slice(0, -1);
-              previousPlugins = previousPlugins.map(p => {
-                const parts = p.split(/[/\\]/);
-                return parts.pop();
-              }); // sanitize for folder names
-              const compatFolderName = previousPlugins.join('_');
-              const compatPatchPath = path.join(outputPluginPath, 'engineAlt', compatFolderName, relative + '.patch');
+              const previousPlugins = modifiedEngineFiles.get(relative).filter(p => p.plugin !== pluginInfo.fullName);
               
-              await fs.mkdir(path.dirname(compatPatchPath), { recursive: true });
-              await fs.writeFile(compatPatchPath, patchText, 'utf8');
-              console.log('Created compatibility patch for', relative, 'in engineAlt/', compatFolderName);
+              // Generate all non-empty combinations of previousPlugins
+              const generateCombinations = (arr) => {
+                const result = [];
+                const n = arr.length;
+                for (let i = 1; i < (1 << n); i++) {
+                  const combination = [];
+                  for (let j = 0; j < n; j++) {
+                    if (i & (1 << j)) {
+                      combination.push(arr[j]);
+                    }
+                  }
+                  result.push(combination);
+                }
+                return result;
+              };
+              
+              const combinations = generateCombinations(previousPlugins);              
+
+              // Create compatibility patch for each combination
+              for (const combination of combinations) {               
+                // Extract and sanitize plugin names
+                const pluginNames = combination.map(p => {
+                  const parts = p.plugin.split(/[/\\]/);
+                  return parts.pop();
+                });
+                const compatFolderName = pluginNames.join('_');                
+                
+                //if modifiedEngineAltFiles already has an entry for this relative path and compatFolderName, it means a previous combination has modified the same file, so we need to use that as the base for the next patch instead of the original engine file
+                let combinedContent = engineContent;
+                if (modifiedEngineAltFiles.has(`${relative}|${compatFolderName}`)) {
+                  combinedContent = modifiedEngineAltFiles.get(`${relative}|${compatFolderName}`);
+                } else {                   
+                  // Generate patch text that applies all changes from the combination to the new engine
+                  for (const plugin of combination) {
+                    // Perform three-way merge: ours=new, base=previous, theirs=alt
+                    const mergeResult = diff3.diff3Merge(combinedContent.split(/\r?\n/), engineContent.split(/\r?\n/), plugin.content.split(/\r?\n/));
+                    // Check for conflicts
+                    const hasConflicts = mergeResult.some(part => part.conflict);
+                  
+                    if (hasConflicts) { // If there are conflicts, we cannot generate a compatibility patch for this combination, so we skip it and log a warning
+                      console.warn('Conflicts detected when generating compatibility patch for combination:', pluginNames, 'in file:', relative, '- skipping this combination');
+                      conflicts.push({
+                        plugin: pluginInfo.fullName,
+                        file: `engineAlt/${compatFolderName}/${relative}`,
+                        reason: `Conflicts detected when generating compatibility patch for combination: ${pluginNames.join(', ')}`
+                      });
+                      continue;
+                    } else { // No conflicts, save merged result for next iteration
+                      combinedContent = mergeResult[0].ok.join('\n');
+                    }
+                  }
+                }
+                let combinedPluginContent = pluginContent;
+                const combinedPluginContentPath = path.join(engineAltPath, compatFolderName, relative);
+                try {
+                  combinedPluginContent = await fs.readFile(combinedPluginContentPath, 'utf8');
+                } catch (err) {
+                  combinedPluginContent = pluginContent;
+                  // Perform three-way merge: ours=new, base=previous, theirs=alt
+                  const mergeResult = diff3.diff3Merge(combinedContent.split(/\r?\n/), engineContent.split(/\r?\n/), pluginContent.split(/\r?\n/));
+                  // Check for conflicts
+                  const hasConflicts = mergeResult.some(part => part.conflict);
+                  
+                  if (hasConflicts) { // If there are conflicts, we cannot generate a compatibility patch for this combination, so we skip it and log a warning
+                    console.warn('Conflicts detected when generating compatibility patch for combination:', pluginNames, 'in file:', relative, '- skipping this combination');
+                    conflicts.push({
+                      plugin: pluginInfo.fullName,
+                      file: `engineAlt/${compatFolderName}/${relative}`,
+                      reason: `Conflicts detected when generating compatibility patch for combination: ${pluginNames.join(', ')}`
+                    });
+                    continue;
+                  } else { // No conflicts, save merged result for next iteration
+                    combinedPluginContent = mergeResult[0].ok.join('\n');
+                  }
+                }
+                const patchText = jsdiff.createPatch(relative, combinedContent, combinedPluginContent);
+
+                modifiedEngineAltFiles.set(`${relative}|${compatFolderName}_${pluginInfo.plugin}`, combinedPluginContent);
+                
+                const compatPatchPath = path.join(outputPluginPath, 'engineAlt', compatFolderName, relative + '.patch');
+                
+                await fs.mkdir(path.dirname(compatPatchPath), { recursive: true });
+                await fs.writeFile(compatPatchPath, patchText, 'utf8');
+                console.log('Created compatibility patch for', relative, 'in engineAlt/', compatFolderName);
+              }
             }
           } catch (err) {
             // if engine file doesn't exist, copy the plugin file as-is

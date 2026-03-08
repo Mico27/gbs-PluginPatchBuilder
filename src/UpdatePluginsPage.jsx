@@ -11,7 +11,7 @@ export const UpdatePluginsPage = () => {
   const [pluginsFolder, setPluginsFolder] = React.useState('');
   const [updatedPluginsFolderOutput, setUpdatedPluginsFolderOutput] = React.useState('');
   const [progress, setProgress] = React.useState({ plugin: '', file: '' });
-  const [createCompabilityPatches, setCreateCompabilityPatches] = React.useState(false);
+  const [createEngineAlts, setCreateEngineAlts] = React.useState(false);
 
   React.useEffect(() => {
     if (window.electronAPI && window.electronAPI.onUpdateProgress) {
@@ -23,8 +23,8 @@ export const UpdatePluginsPage = () => {
 
   const handleUpdate = async () => {
     const data = engineChanged
-      ? { engineChanged, previousEngineFolder, newEngineFolder, pluginsFolder, updatedPluginsFolderOutput, createCompabilityPatches }
-      : { engineChanged, engineFolder, pluginsFolder, updatedPluginsFolderOutput, createCompabilityPatches };
+      ? { engineChanged, previousEngineFolder, newEngineFolder, pluginsFolder, updatedPluginsFolderOutput, createEngineAlts }
+      : { engineChanged, engineFolder, pluginsFolder, updatedPluginsFolderOutput, createEngineAlts };
     try {
       const result = await UpdatePluginHelper.updatePlugins(data);
       console.log('Plugins updated result', result);
@@ -52,10 +52,10 @@ export const UpdatePluginsPage = () => {
         <label className="checkbox-label">
           <input
             type="checkbox"
-            checked={createCompabilityPatches}
-            onChange={(e) => setCreateCompabilityPatches(e.target.checked)}
+            checked={createEngineAlts}
+            onChange={(e) => setCreateEngineAlts(e.target.checked)}
           />
-          <span>Create Compability Patches</span>
+          <span>Generate EngineAlt For Plugin Intercompability</span>
         </label>
       </div>
 
