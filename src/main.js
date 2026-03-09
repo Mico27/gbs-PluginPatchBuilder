@@ -633,6 +633,88 @@ ipcMain.handle('update-plugins', async (_, data) => {
         }
       }
     }
+
+    // Generate engineAltRules for plugins with engineAlt folders
+    log.info('Generating engineAltRules for plugins with engineAlt folders...');
+    for (const pluginInfo of allPlugins) {
+      const outputPluginPath = path.join(updatedPluginsFolderOutput, pluginInfo.author, pluginInfo.plugin);
+      const engineAltPath = path.join(outputPluginPath, 'engineAlt');
+      const pluginJsonPath = path.join(outputPluginPath, 'plugin.json');
+      
+      try {
+        // Read the plugin.json first
+        let pluginJson = null;
+        try {
+          const pluginJsonContent = await fs.readFile(pluginJsonPath, 'utf8');
+          pluginJson = JSON.parse(pluginJsonContent);
+        } catch (err) {
+          log.warn('Could not read plugin.json for ' + pluginInfo.fullName + ': ' + err.message);
+          continue;
+        }
+        
+        // Check if engineAlt folder exists
+        let engineAltFolders = [];
+        try {
+          const engineAltDirs = await fs.readdir(engineAltPath, { withFileTypes: true });
+          engineAltFolders = engineAltDirs.filter(d => d.isDirectory()).map(d => d.name);
+        } catch (err) {
+          if (err.code !== 'ENOENT') {
+            log.warn('Could not read engineAlt folder for ' + pluginInfo.fullName + ': ' + err.message);
+          }
+          // If engineAlt doesn't exist or can't be read, engineAltFolders stays empty
+        }
+        
+        if (engineAltFolders.length === 0) {
+          // No engineAlt folders, remove engineAltRules from plugin.json if it exists
+          if (pluginJson.engineAltRules) {
+            delete pluginJson.engineAltRules;
+            log.info('Cleared engineAltRules for ' + pluginInfo.fullName + ' (no engineAlt folders)');
+          }
+        } else {
+          // Generate engineAltRules
+          pluginJson.engineAltRules = [];
+          for (const engineAltFolder of engineAltFolders) {
+            // Parse the folder name to extract plugin names
+            const pluginNames = engineAltFolder.split('_');
+
+            // Create a rule for this combination
+            const rule = {
+              when: {
+                additionalPlugins: pluginNames.map(name => {
+                  // Try with Mico27 author first, then just the name
+                  return `Mico27/${name}`;
+                })
+              },
+              use: engineAltFolder
+            };
+            pluginJson.engineAltRules.push(rule);
+
+            // Also add a rule with just the plugin names (in case author is different)
+            if (!pluginNames.some(name => name.includes('/'))) {
+              pluginJson.engineAltRules.push({
+                when: {
+                  additionalPlugins: pluginNames
+                },
+                use: engineAltFolder
+              });
+            }
+          }
+
+          // Sort rules by number of additionalPlugins (most specific first)
+          pluginJson.engineAltRules.sort((a, b) => {
+            const aCount = (a.when?.additionalPlugins?.length || 0);
+            const bCount = (b.when?.additionalPlugins?.length || 0);
+            return bCount - aCount;
+          });
+          log.info('Generated engineAltRules for ' + pluginInfo.fullName + ' with ' + engineAltFolders.length + ' engineAlt folders');
+        }
+        // Write updated plugin.json
+        await fs.writeFile(pluginJsonPath, JSON.stringify(pluginJson, null, 2), 'utf8');
+        log.info('Updated plugin.json for ' + pluginInfo.fullName);
+      } catch (err) {
+        log.warn('Error processing plugin.json for ' + pluginInfo.fullName + ': ' + err.message);
+      }
+    }
     
     // Send final progress update
     const win = BrowserWindow.getAllWindows()[0];
