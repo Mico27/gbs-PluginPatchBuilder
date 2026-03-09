@@ -56,10 +56,30 @@ ipcMain.handle('update-plugins', async (_, data) => {
   const fs = require('fs').promises;
   const path = require('path');
 
+  // Normalize whitespace in text content
+  const normalizeWhitespace = (content) => {
+    return content.replace(/\r\n/g, '\n');
+  };
+
+  // Logging helper to capture console output
+  const logs = [];
+  const log = {
+    info: (message) => {
+      const logEntry = typeof message === 'string' ? message : JSON.stringify(message);
+      console.log(logEntry);
+      logs.push(logEntry);
+    },
+    warn: (message) => {
+      const logEntry = typeof message === 'string' ? message : JSON.stringify(message);
+      console.warn(logEntry);
+      logs.push(`[WARN] ${logEntry}`);
+    }
+  };
+
   // Empty the output folder first
   try {
     await fs.rm(updatedPluginsFolderOutput, { recursive: true, force: true });
-    console.log('Emptied output folder:', updatedPluginsFolderOutput);
+    log.info('Emptied output folder: ' + updatedPluginsFolderOutput);
   } catch (err) {
     // Folder might not exist, that's ok
   }
@@ -111,30 +131,32 @@ ipcMain.handle('update-plugins', async (_, data) => {
     let newEngineFiles = new Map();
     
     if (engineChanged) {
-      console.log('Engine changed, preparing for three-way merge...');
+      log.info('Engine changed, preparing for three-way merge...');
       
       // Gather previous engine files
       try {
         const prevFiles = await gatherFiles(previousEngineFolder);
         for (const filePath of prevFiles) {
-          const relative = path.relative(previousEngineFolder, filePath);
+          //const relative = path.relative(previousEngineFolder, filePath);
+          const relative = filePath.substring(previousEngineFolder.length + 1);
           const content = await fs.readFile(filePath, 'utf8');
           previousEngineFiles.set(relative, content);
         }
       } catch (err) {
-        console.warn('Could not read previous engine files:', err.message);
+        log.warn('Could not read previous engine files: ' + err.message);
       }
       
       // Gather new engine files
       try {
         const newFiles = await gatherFiles(newEngineFolder);
         for (const filePath of newFiles) {
-          const relative = path.relative(newEngineFolder, filePath);
+          //const relative = path.relative(newEngineFolder, filePath);
+          const relative = filePath.substring(newEngineFolder.length + 1);
           const content = await fs.readFile(filePath, 'utf8');
           newEngineFiles.set(relative, content);
         }
       } catch (err) {
-        console.warn('Could not read new engine files:', err.message);
+        log.warn('Could not read new engine files: ' + err.message);
       }
     }
 
@@ -166,7 +188,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
         
         // Copy everything from plugin folder to output EXCEPT the engine folder
         await copyDir(pluginPath, outputPluginPath, [enginePath]);
-        console.log('Copied plugin structure (excluding engine) for', pluginInfo.fullName);
+        log.info('Copied plugin structure (excluding engine) for ' + pluginInfo.fullName);
         
         // Copy engine.json directly
         const engineJsonSrc = path.join(enginePath, 'engine.json');
@@ -175,9 +197,9 @@ ipcMain.handle('update-plugins', async (_, data) => {
           const engineJsonContent = await fs.readFile(engineJsonSrc, 'utf8');
           await fs.mkdir(path.dirname(engineJsonDst), { recursive: true });
           await fs.writeFile(engineJsonDst, engineJsonContent, 'utf8');
-          console.log('Copied engine.json for', pluginInfo.fullName);
+          log.info('Copied engine.json for ' + pluginInfo.fullName);
         } catch (err) {
-          console.warn('Could not copy engine.json for', pluginInfo.fullName, err.message);
+          log.warn('Could not copy engine.json for ' + pluginInfo.fullName + ' ' + err.message);
         }
         
         // Apply engine patches to plugin engine files
@@ -185,12 +207,13 @@ ipcMain.handle('update-plugins', async (_, data) => {
         try {
           engineFiles = await gatherFiles(enginePath);
         } catch (err) {
-          console.log('No engine folder for', pluginInfo.fullName);
+          log.info('No engine folder for ' + pluginInfo.fullName);
           continue;
         }
         
         for (const filePath of engineFiles) {
-          const relative = path.relative(enginePath, filePath);
+          //const relative = path.relative(enginePath, filePath);
+          const relative = filePath.substring(enginePath.length + 1);
           
           // Skip engine.json (already copied)
           if (relative === 'engine.json') {
@@ -233,7 +256,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
                   reason: 'Merge conflicts detected',
                   details: conflictDetails
                 });
-                console.warn('Merge conflicts for', relative, '- copying original');
+                log.warn('Merge conflicts for ' + relative + ' - copying original');
                 
                 // Track file modification even with conflicts
                 if (!modifiedEngineFiles.has(relative)) {
@@ -251,7 +274,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
                 const outPath = path.join(outputPluginPath, 'engine', relative);
                 await fs.mkdir(path.dirname(outPath), { recursive: true });
                 await fs.writeFile(outPath, mergedContent);
-                console.log('Merged engine changes into:', relative);
+                log.info('Merged engine changes into: ' + relative);
                 
                 // Track this file modification for compatibility patches
                 if (!modifiedEngineFiles.has(relative)) {
@@ -260,7 +283,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
                 modifiedEngineFiles.get(relative).push({ plugin: pluginInfo.fullName, content: mergedContent });
               }
             } catch (err) {
-              console.warn('Error merging file', relative, err.message);
+              log.warn('Error merging file ' + relative + ' ' + err.message);
               conflicts.push({
                 plugin: pluginInfo.fullName,
                 file: relative,
@@ -278,7 +301,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
             const outPath = path.join(outputPluginPath, 'engine', relative);
             await fs.mkdir(path.dirname(outPath), { recursive: true });
             await fs.writeFile(outPath, pluginContent);
-            console.log('No engine files for merge:', relative, '- copied as-is');
+            log.info('No engine files for merge: ' + relative + ' - copied as-is');
           }
         }
         
@@ -293,7 +316,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
           engineAltDirs = altDirEntries.filter(d => d.isDirectory()).map(d => d.name);
         } catch (err) {
           // No engineAlt folder, skip
-          console.log('No engineAlt folder for', pluginInfo.fullName);
+          log.info('No engineAlt folder for ' + pluginInfo.fullName);
         }
         
         for (const compatFolderName of engineAltDirs) {
@@ -302,12 +325,13 @@ ipcMain.handle('update-plugins', async (_, data) => {
           try {
             altFiles = await gatherFiles(engineAltFilePath);
           } catch (err) {
-            console.warn('Could not read engineAlt folder for', pluginInfo.fullName, compatFolderName);
+            log.warn('Could not read engineAlt folder for ' + pluginInfo.fullName + ' ' + compatFolderName);
             continue;
           }
           
           for (const filePath of altFiles) {
-            const relative = path.relative(engineAltFilePath, filePath);
+            //const relative = path.relative(engineAltFilePath, filePath);
+            const relative = filePath.substring(engineAltFilePath.length + 1);
             
             const win = BrowserWindow.getAllWindows()[0];
             if (win) {
@@ -345,7 +369,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
                     reason: 'Merge conflicts detected',
                     details: conflictDetails
                   });
-                  console.warn('Merge conflicts for engineAlt/', compatFolderName, '/', relative, '- copying original');
+                  log.warn('Merge conflicts for engineAlt/' + compatFolderName + '/' + relative + ' - copying original');
                   
                   // Copy original alt file
                   const outPath = path.join(outputPluginPath, 'engineAlt', compatFolderName, relative);
@@ -357,10 +381,10 @@ ipcMain.handle('update-plugins', async (_, data) => {
                   const outPath = path.join(outputPluginPath, 'engineAlt', compatFolderName, relative);
                   await fs.mkdir(path.dirname(outPath), { recursive: true });
                   await fs.writeFile(outPath, mergedContent);
-                  console.log('Merged engine changes into engineAlt/', compatFolderName, '/', relative);
+                  log.info('Merged engine changes into engineAlt/' + compatFolderName + '/' + relative);
                 }
               } catch (err) {
-                console.warn('Error merging engineAlt file', relative, err.message);
+              log.warn('Error merging engineAlt file ' + relative + ' ' + err.message);
                 conflicts.push({
                   plugin: pluginInfo.fullName,
                   file: `engineAlt/${compatFolderName}/${relative}`,
@@ -378,7 +402,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
               const outPath = path.join(outputPluginPath, 'engineAlt', compatFolderName, relative);
               await fs.mkdir(path.dirname(outPath), { recursive: true });
               await fs.writeFile(outPath, altContent);
-              console.log('No engine files for engineAlt merge:', compatFolderName, '/', relative, '- copied as-is');
+              log.info('No engine files for engineAlt merge: ' + compatFolderName + ' / ' + relative + ' - copied as-is');
             }
           }
         }
@@ -387,7 +411,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
         const enginePath = path.join(pluginPath, 'engine');
         const engineAltPath = path.join(pluginPath, 'engineAlt');
         await copyDir(pluginPath, outputPluginPath, [enginePath]);
-        console.log('Copied plugin structure (excluding engine) for', pluginInfo.fullName);
+        log.info('Copied plugin structure (excluding engine) for ' + pluginInfo.fullName);
         
         // Copy engine.json directly
         const engineJsonSrc = path.join(enginePath, 'engine.json');
@@ -396,9 +420,9 @@ ipcMain.handle('update-plugins', async (_, data) => {
           const engineJsonContent = await fs.readFile(engineJsonSrc, 'utf8');
           await fs.mkdir(path.dirname(engineJsonDst), { recursive: true });
           await fs.writeFile(engineJsonDst, engineJsonContent, 'utf8');
-          console.log('Copied engine.json for', pluginInfo.fullName);
+          log.info('Copied engine.json for ' + pluginInfo.fullName);
         } catch (err) {
-          console.warn('Could not copy engine.json for', pluginInfo.fullName, err.message);
+          log.warn('Could not copy engine.json for ' + pluginInfo.fullName + ' ' + err.message);
         }
         
         // Now process files in the engine subfolder
@@ -407,13 +431,14 @@ ipcMain.handle('update-plugins', async (_, data) => {
           engineFiles = await gatherFiles(enginePath);
         } catch (err) {
           // No engine folder, skip
-          console.log('No engine folder for', pluginInfo.fullName);
+          log.info('No engine folder for ' + pluginInfo.fullName);
           continue;
         }
         
         for (const filePath of engineFiles) {
-          const relative = path.relative(enginePath, filePath);
-          
+          //const relative = path.relative(enginePath, filePath);
+          const relative = filePath.substring(enginePath.length + 1);
+
           // Skip engine.json files (already copied)
           if (relative === 'engine.json') {
             continue;
@@ -425,7 +450,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
           if (win) {
             win.webContents.send('update-progress', { plugin: pluginInfo.fullName, file: `engine/${relative}` });
           }
-          console.log('processing', pluginInfo.fullName, `engine/${relative}`);
+          log.info('processing ' + pluginInfo.fullName + ' engine/' + relative);
           try {
             const [pluginContent, engineContent] = await Promise.all([
               fs.readFile(filePath, 'utf8'),
@@ -436,16 +461,19 @@ ipcMain.handle('update-plugins', async (_, data) => {
             const diffObj = diff3.diffPatch(engineContent.split(/\r?\n/), pluginContent.split(/\r?\n/));
             if (!diffObj || diffObj.length === 0) {
               // No changes - copy the file as-is
-              console.log('No changes, ignore file:', relative);
+              log.info('No changes, ignore file: ' + relative);
               continue;
             }
-            // create unified diff text from original -> modified
-            const patchText = jsdiff.createPatch(relative, engineContent, pluginContent);
+            // Normalize whitespace and create unified diff text from original -> modified
+            const normalizedEngineContent = normalizeWhitespace(engineContent);
+            const normalizedPluginContent = normalizeWhitespace(pluginContent);
+            const patchText = jsdiff.createPatch(relative, normalizedEngineContent, normalizedPluginContent);
             const outPath = path.join(outputPluginPath, 'engine', relative + '.patch');
             await fs.mkdir(path.dirname(outPath), { recursive: true });
             await fs.writeFile(outPath, patchText, 'utf8');
             
             // Track this file modification for compatibility patches
+            log.info('Found changes in: ' + relative);
             if (!modifiedEngineFiles.has(relative)) {
               modifiedEngineFiles.set(relative, []);
             }
@@ -472,7 +500,8 @@ ipcMain.handle('update-plugins', async (_, data) => {
                 return result;
               };
               
-              const combinations = generateCombinations(previousPlugins);              
+                const combinations = generateCombinations(previousPlugins);
+              log.info('Creating ' + combinations.length + ' compatibility patches for: ' + relative);
 
               // Create compatibility patch for each combination
               for (const combination of combinations) {               
@@ -481,8 +510,8 @@ ipcMain.handle('update-plugins', async (_, data) => {
                   const parts = p.plugin.split(/[/\\]/);
                   return parts.pop();
                 });
-                const compatFolderName = pluginNames.join('_');                
-                
+                const compatFolderName = pluginNames.join('_');
+                                
                 //if modifiedEngineAltFiles already has an entry for this relative path and compatFolderName, it means a previous combination has modified the same file, so we need to use that as the base for the next patch instead of the original engine file
                 let combinedContent = engineContent;
                 if (modifiedEngineAltFiles.has(`${relative}|${compatFolderName}`)) {
@@ -496,7 +525,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
                     const hasConflicts = mergeResult.some(part => part.conflict);
                   
                     if (hasConflicts) { // If there are conflicts, we cannot generate a compatibility patch for this combination, so we skip it and log a warning
-                      console.warn('Conflicts detected when generating compatibility patch for combination:', pluginNames, 'in file:', relative, '- skipping this combination');
+                    log.warn('Conflicts detected when generating compatibility patch for combination: ' + pluginNames.join(', ') + ' in file: ' + relative + ' - skipping this combination');
                       conflicts.push({
                         plugin: pluginInfo.fullName,
                         file: `engineAlt/${compatFolderName}/${relative}`,
@@ -520,7 +549,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
                   const hasConflicts = mergeResult.some(part => part.conflict);
                   
                   if (hasConflicts) { // If there are conflicts, we cannot generate a compatibility patch for this combination, so we skip it and log a warning
-                    console.warn('Conflicts detected when generating compatibility patch for combination:', pluginNames, 'in file:', relative, '- skipping this combination');
+                    log.warn('Conflicts detected when generating compatibility patch for combination: ' + pluginNames.join(', ') + ' in file: ' + relative + ' - skipping this combination');
                     conflicts.push({
                       plugin: pluginInfo.fullName,
                       file: `engineAlt/${compatFolderName}/${relative}`,
@@ -531,28 +560,74 @@ ipcMain.handle('update-plugins', async (_, data) => {
                     combinedPluginContent = mergeResult[0].ok.join('\n');
                   }
                 }
-                const patchText = jsdiff.createPatch(relative, combinedContent, combinedPluginContent);
-
+                // compute diff using node-diff3 just to see if any differences exist
+                /*
+                const diffObj = diff3.diffPatch(combinedContent.split(/\r?\n/), combinedPluginContent.split(/\r?\n/));
+                if (!diffObj || diffObj.length === 0) {
+                  // No changes - copy the file as-is
+                  log.info('No changes, ignore file: ' + relative);
+                  //We still add it to modifiedEngineAltFiles so that future combinations will use this version as the base, even though it is identical to the original engine file
+                  modifiedEngineAltFiles.set(`${relative}|${compatFolderName}_${pluginInfo.plugin}`, combinedPluginContent);   
+                  modifiedEngineAltFiles.set(`${relative}.patch|${compatFolderName}_${pluginInfo.plugin}`, combinedPluginContent);  
+                  continue;
+                }*/
+                // Normalize whitespace and create unified diff text
+                const normalizedCombinedContent = normalizeWhitespace(combinedContent);
+                const normalizedCombinedPluginContent = normalizeWhitespace(combinedPluginContent);
+                const patchText = jsdiff.createPatch(relative, normalizedCombinedContent, normalizedCombinedPluginContent);
                 modifiedEngineAltFiles.set(`${relative}|${compatFolderName}_${pluginInfo.plugin}`, combinedPluginContent);
-                
-                const compatPatchPath = path.join(outputPluginPath, 'engineAlt', compatFolderName, relative + '.patch');
-                
+                modifiedEngineAltFiles.set(`${relative}.patch|${compatFolderName}_${pluginInfo.plugin}`, combinedPluginContent);            
+                const compatPatchPath = path.join(outputPluginPath, 'engineAlt', compatFolderName, relative + '.patch');                
                 await fs.mkdir(path.dirname(compatPatchPath), { recursive: true });
                 await fs.writeFile(compatPatchPath, patchText, 'utf8');
-                console.log('Created compatibility patch for', relative, 'in engineAlt/', compatFolderName);
+                log.info('Created compatibility patch for ' + relative + ' in engineAlt/' + compatFolderName);
+              }
+              
+              // Copy all engine files that are not in any engineAlt folder
+              const allExistingEngineFiles = await gatherFiles(path.join(outputPluginPath, 'engine'));
+              for (const existingEngineFile of allExistingEngineFiles) {
+                
+                //const relativeEngineFile = existingEngineFile.replace(path.join(outputPluginPath, 'engine\\'), '');
+                const relativeEngineFile = existingEngineFile.substring(path.join(outputPluginPath, 'engine').length + 1);
+                
+                // Check if this file exists in any engineAlt folder
+                let altDirs = [];
+                try {
+                  const altDirEntries = await fs.readdir(path.join(outputPluginPath, 'engineAlt'), { withFileTypes: true });
+                  altDirs = altDirEntries.filter(d => d.isDirectory()).map(d => d.name);
+                } catch (err) {
+                  // No engineAlt folder yet
+                }
+                
+                for (const altDir of altDirs) {
+                  const altFilePath = path.join(outputPluginPath, 'engineAlt', altDir, relativeEngineFile);
+                  if (modifiedEngineAltFiles.has(`${relativeEngineFile}|${altDir}_${pluginInfo.plugin}`)) {
+                    // File is in the modified list, skip it
+                  log.info('File ' + relativeEngineFile + ' is modified in engineAlt/' + altDir + ' - skipping copy for compatibility');
+                    continue;
+                  }
+                  try {
+                    await fs.access(altFilePath);
+                  } catch (err) {
+                    // File doesn't exist in this alt folder
+                    await fs.mkdir(path.dirname(altFilePath), { recursive: true });
+                    await fs.copyFile(existingEngineFile, altFilePath);
+                    log.info('Copied modified engine file to alt folder for compatibility: ' + altFilePath);
+                  }
+                }
               }
             }
           } catch (err) {
             // if engine file doesn't exist, copy the plugin file as-is
             if (err.code === 'ENOENT') {
-              console.log('Engine file not found, copying plugin file:', relative);
+              log.info('Engine file not found, copying plugin file: ' + relative);
               const pluginContent = await fs.readFile(filePath);
               const outPath = path.join(outputPluginPath, 'engine', relative);
               await fs.mkdir(path.dirname(outPath), { recursive: true });
               await fs.writeFile(outPath, pluginContent);
             } else {
               // skip other read errors
-              console.warn('Skipping file', filePath, 'error', err.message);
+              log.warn('Skipping file ' + filePath + ' error ' + err.message);
             }
           }
         }
@@ -569,6 +644,12 @@ ipcMain.handle('update-plugins', async (_, data) => {
       });
     }
     
+    // Write console output log
+    const consoleLogPath = path.join(updatedPluginsFolderOutput, 'update_process.log');
+    const consoleLogContent = logs.join('\n');
+    await fs.writeFile(consoleLogPath, consoleLogContent, 'utf8');
+    log.info(`Console log written to: ${consoleLogPath}`);
+    
     // Write conflicts log if any
     if (conflicts.length > 0) {
       const logPath = path.join(updatedPluginsFolderOutput, 'patch_conflicts.log');
@@ -577,7 +658,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
       ).join('\n')}`;
       
       await fs.writeFile(logPath, logContent, 'utf8');
-      console.log(`Conflicts log written to: ${logPath}`);
+      log.info(`Conflicts log written to: ${logPath}`);
     }
     
     return { success: true, conflicts: conflicts.length };

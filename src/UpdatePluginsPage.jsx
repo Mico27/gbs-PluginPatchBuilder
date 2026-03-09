@@ -35,7 +35,7 @@ export const UpdatePluginsPage = () => {
 
   return (
     <div className="update-plugins-page">
-      <h2>Update plugins</h2>
+      <h2>GBStudio Plugin Patcher</h2>
       
       <div className="checkbox-container">
         <label className="checkbox-label">
@@ -47,7 +47,7 @@ export const UpdatePluginsPage = () => {
           <span>Engine Changed</span>
         </label>
       </div>
-
+      {!engineChanged && (
       <div className="checkbox-container">
         <label className="checkbox-label">
           <input
@@ -57,7 +57,7 @@ export const UpdatePluginsPage = () => {
           />
           <span>Generate EngineAlt For Plugin Intercompability</span>
         </label>
-      </div>
+      </div>)}
 
       {engineChanged ? (
         <>
@@ -68,8 +68,8 @@ export const UpdatePluginsPage = () => {
         <FolderSelector label="Engine Folder" folder={engineFolder} onChange={setEngineFolder} />
       )}
 
-      <FolderSelector label="Plugins Folder" folder={pluginsFolder} onChange={setPluginsFolder} />
-      <FolderSelector label="Updated Plugins Folder Output" folder={updatedPluginsFolderOutput} onChange={setUpdatedPluginsFolderOutput} />
+      <FolderSelector label="Plugins Source Folder" folder={pluginsFolder} onChange={setPluginsFolder} />
+      <FolderSelector label={engineChanged? "Updated Plugins Source Folder Output": "Patched Plugins Folder Output"} folder={updatedPluginsFolderOutput} onChange={setUpdatedPluginsFolderOutput} />
       <button className="update-button" onClick={handleUpdate}>Update</button>
       {progress.plugin && (
         <div style={{ marginTop: '15px', fontSize: '13px', color: '#ccc' }}>
