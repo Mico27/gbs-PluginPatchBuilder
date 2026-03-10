@@ -121,6 +121,22 @@ ipcMain.handle('update-plugins', async (_, data) => {
     }
   }
 
+  // Generate all non-empty combinations of previousPlugins
+  const generateCombinations = (arr) => {
+    const result = [];
+    const n = arr.length;
+    for (let i = 1; i < (1 << n); i++) {
+      const combination = [];
+      for (let j = 0; j < n; j++) {
+        if (i & (1 << j)) {
+          combination.push(arr[j]);
+        }
+      }
+      result.push(combination);
+    }
+    return result;
+  };
+
   try {
     let conflicts = [];
     let modifiedEngineFiles = new Map(); // Track which plugins modified which engine files
@@ -435,6 +451,8 @@ ipcMain.handle('update-plugins', async (_, data) => {
           continue;
         }
         
+        const allPluginsCombinations = new Set();
+
         for (const filePath of engineFiles) {
           //const relative = path.relative(enginePath, filePath);
           const relative = filePath.substring(enginePath.length + 1);
@@ -483,24 +501,12 @@ ipcMain.handle('update-plugins', async (_, data) => {
             if (createEngineAlts && modifiedEngineFiles.get(relative).length > 1) {
               // Get list of all plugins that modified this file (excluding current)
               const previousPlugins = modifiedEngineFiles.get(relative).filter(p => p.plugin !== pluginInfo.fullName);
-              
-              // Generate all non-empty combinations of previousPlugins
-              const generateCombinations = (arr) => {
-                const result = [];
-                const n = arr.length;
-                for (let i = 1; i < (1 << n); i++) {
-                  const combination = [];
-                  for (let j = 0; j < n; j++) {
-                    if (i & (1 << j)) {
-                      combination.push(arr[j]);
-                    }
-                  }
-                  result.push(combination);
-                }
-                return result;
-              };
-              
-                const combinations = generateCombinations(previousPlugins);
+                            
+              // add previousPlugins in allPluginsCombinations
+              for (const p of previousPlugins) {
+                allPluginsCombinations.add(p.plugin);
+              }              
+              const combinations = generateCombinations(previousPlugins);
               log.info('Creating ' + combinations.length + ' compatibility patches for: ' + relative);
 
               // Create compatibility patch for each combination
@@ -582,91 +588,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
                 await fs.mkdir(path.dirname(compatPatchPath), { recursive: true });
                 await fs.writeFile(compatPatchPath, patchText, 'utf8');
                 log.info('Created compatibility patch for ' + relative + ' in engineAlt/' + compatFolderName);
-              }
-              
-              
-                // Reiterate combinations and copy .patch files from parent combinations
-                for (const combination of combinations) {
-                const pluginNames = combination.map(p => {
-                  const parts = p.plugin.split(/[/\\]/);
-                  return parts.pop();
-                });
-                const compatFolderName = pluginNames.join('_');
-                const compatFolderPath = path.join(outputPluginPath, 'engineAlt', compatFolderName);
-
-                // Check if other combinations are subsets of current combination
-                for (const parentCombination of combinations) {
-                  const parentPluginNames = parentCombination.map(p => {
-                    const parts = p.plugin.split(/[/\\]/);
-                    return parts.pop();
-                  });
-                  
-                  // Check if parentCombination is a subset of current combination
-                  const isSubset = parentPluginNames.every(name => pluginNames.includes(name));
-                  const isDifferent = parentPluginNames.length < pluginNames.length;
-                  
-                  if (isSubset && isDifferent) {
-                    const parentCompatFolderName = parentPluginNames.join('_');
-                    const parentCompatFolderPath = path.join(outputPluginPath, 'engineAlt', parentCompatFolderName);
-                    
-                    try {
-                      const parentPatchFiles = await gatherFiles(parentCompatFolderPath);
-                      for (const parentPatchFile of parentPatchFiles) {
-                        if (parentPatchFile.endsWith('.patch')) {
-                          const relativeParentPatchFile = parentPatchFile.substring(parentCompatFolderPath.length + 1);
-                          const targetPatchFile = path.join(compatFolderPath, relativeParentPatchFile);
-                          
-                          try {
-                            await fs.access(targetPatchFile);
-                          } catch (err) {
-                            // File doesn't exist in current combination, copy it
-                            await fs.mkdir(path.dirname(targetPatchFile), { recursive: true });
-                            await fs.copyFile(parentPatchFile, targetPatchFile);
-                            log.info('Copied patch from parent combination ' + parentCompatFolderName + ' to ' + compatFolderName + ': ' + relativeParentPatchFile);
-                          }
-                        }
-                      }
-                    } catch (err) {
-                      // Parent folder doesn't exist, skip
-                    }
-                  }
-                }
-                }
-
-
-              // Copy all engine files that are not in any engineAlt folder
-              const allExistingEngineFiles = await gatherFiles(path.join(outputPluginPath, 'engine'));
-              for (const existingEngineFile of allExistingEngineFiles) {
-                
-                //const relativeEngineFile = existingEngineFile.replace(path.join(outputPluginPath, 'engine\\'), '');
-                const relativeEngineFile = existingEngineFile.substring(path.join(outputPluginPath, 'engine').length + 1);
-                
-                // Check if this file exists in any engineAlt folder
-                let altDirs = [];
-                try {
-                  const altDirEntries = await fs.readdir(path.join(outputPluginPath, 'engineAlt'), { withFileTypes: true });
-                  altDirs = altDirEntries.filter(d => d.isDirectory()).map(d => d.name);
-                } catch (err) {
-                  // No engineAlt folder yet
-                }
-                
-                for (const altDir of altDirs) {
-                  const altFilePath = path.join(outputPluginPath, 'engineAlt', altDir, relativeEngineFile);
-                  if (modifiedEngineAltFiles.has(`${relativeEngineFile}|${altDir}_${pluginInfo.plugin}`)) {
-                    // File is in the modified list, skip it
-                  log.info('File ' + relativeEngineFile + ' is modified in engineAlt/' + altDir + ' - skipping copy for compatibility');
-                    continue;
-                  }
-                  try {
-                    await fs.access(altFilePath);
-                  } catch (err) {
-                    // File doesn't exist in this alt folder
-                    await fs.mkdir(path.dirname(altFilePath), { recursive: true });
-                    await fs.copyFile(existingEngineFile, altFilePath);
-                    log.info('Copied modified engine file to alt folder for compatibility: ' + altFilePath);
-                  }
-                }
-              }
+              }              
             }
           } catch (err) {
             // if engine file doesn't exist, copy the plugin file as-is
@@ -681,6 +603,136 @@ ipcMain.handle('update-plugins', async (_, data) => {
               log.warn('Skipping file ' + filePath + ' error ' + err.message);
             }
           }
+        }
+        
+        //Check for missing engineAlt combinations folders depending on allPluginsCombinations
+        if (createEngineAlts) {
+          const engineAltBasePath = path.join(outputPluginPath, 'engineAlt');
+          let existingAltDirs = [];
+          try {
+            const altDirEntries = await fs.readdir(engineAltBasePath, { withFileTypes: true });
+            existingAltDirs = altDirEntries.filter(d => d.isDirectory()).map(d => d.name);
+          } catch (err) {
+            // No engineAlt folder, continue
+            continue;
+          }
+          // sort allPluginsCombinations alphabeticaly
+          const allCombinations = generateCombinations(Array.from(allPluginsCombinations).sort());
+                        
+          // Reiterate combinations and copy .patch files from parent combinations
+          for (const combination of allCombinations) {
+            const pluginNames = combination.map(p => {
+              const parts = p.split(/[/\\]/);
+              return parts.pop();
+            });
+            const compatFolderName = pluginNames.join('_');
+            const compatFolderPath = path.join(outputPluginPath, 'engineAlt', compatFolderName);
+
+            // Check if other combinations are subsets of current combination
+            for (const parentCombination of allCombinations) {
+              const parentPluginNames = parentCombination.map(p => {
+                const parts = p.split(/[/\\]/);
+                return parts.pop();
+              });
+
+              // Check if parentCombination is a subset of current combination
+              const isSubset = parentPluginNames.every(name => pluginNames.includes(name));
+              const isDifferent = parentPluginNames.length < pluginNames.length;
+
+              if (isSubset && isDifferent) {
+                const parentCompatFolderName = parentPluginNames.join('_');
+                const parentCompatFolderPath = path.join(outputPluginPath, 'engineAlt', parentCompatFolderName);
+
+                try {
+                  const parentPatchFiles = await gatherFiles(parentCompatFolderPath);
+                  for (const parentPatchFile of parentPatchFiles) {
+                    if (parentPatchFile.endsWith('.patch')) {
+                      const relativeParentPatchFile = parentPatchFile.substring(parentCompatFolderPath.length + 1);
+                      const targetPatchFile = path.join(compatFolderPath, relativeParentPatchFile);
+
+                      try {
+                        await fs.access(targetPatchFile);
+                      } catch (err) {
+                        // File doesn't exist in current combination, copy it
+                        await fs.mkdir(path.dirname(targetPatchFile), { recursive: true });
+                        await fs.copyFile(parentPatchFile, targetPatchFile);
+                        log.info('Copied patch from parent combination ' + parentCompatFolderName + ' to ' + compatFolderName + ': ' + relativeParentPatchFile);
+                      }
+                    }
+                  }
+                } catch (err) {
+                  // Parent folder doesn't exist, skip
+                }
+              }
+            }
+          }
+          //iterate combinations again to create missing combinations folders and copy files from existing combinations that comprise this combination
+          for (const combination of allCombinations) {               
+            // Extract and sanitize plugin names
+            const pluginNames = combination.map(p => {
+              const parts = p.split(/[/\\]/);
+              return parts.pop();
+            });
+            const compatFolderName = pluginNames.join('_');
+            if (!existingAltDirs.includes(compatFolderName)) {
+              existingAltDirs.push(compatFolderName);
+              const newAltPath = path.join(engineAltBasePath, compatFolderName);
+              await fs.mkdir(newAltPath, { recursive: true });
+              //if this combination didnt exist before, copy the files from the existing combination that comprise this combination.
+              for (const plugin of combination) {
+                const parentCompatFolderName = pluginNames.filter(name => name !== plugin.split(/[/\\]/).pop()).join('_');
+                const parentCompatFolderPath = path.join(engineAltBasePath, parentCompatFolderName);
+                try {                  
+                  const parentFiles = await gatherFiles(parentCompatFolderPath);
+                  for (const parentFile of parentFiles) {
+                    const relativeParentFile = parentFile.substring(parentCompatFolderPath.length + 1);
+                    const targetFile = path.join(newAltPath, relativeParentFile);
+                    await fs.mkdir(path.dirname(targetFile), { recursive: true });
+                    await fs.copyFile(parentFile, targetFile);
+                    log.info('Copied file from existing combination ' + parentCompatFolderName + ' to new combination ' + compatFolderName + ': ' + relativeParentFile);
+                  }
+                } catch (err) {
+                  // If parent combination doesn't exist, skip
+                  if (err.code !== 'ENOENT') {
+                    log.warn('Could not read parent combination folder ' + parentCompatFolderName + ': ' + err.message);
+                  }
+                }
+              }
+            }
+          }          
+          // Copy all engine files that are not in any engineAlt folder
+          const allExistingEngineFiles = await gatherFiles(path.join(outputPluginPath, 'engine'));
+          for (const existingEngineFile of allExistingEngineFiles) {
+            
+            //const relativeEngineFile = existingEngineFile.replace(path.join(outputPluginPath, 'engine\\'), '');
+            const relativeEngineFile = existingEngineFile.substring(path.join(outputPluginPath, 'engine').length + 1);
+            
+            // Check if this file exists in any engineAlt folder
+            let altDirs = [];
+            try {
+              const altDirEntries = await fs.readdir(path.join(outputPluginPath, 'engineAlt'), { withFileTypes: true });
+              altDirs = altDirEntries.filter(d => d.isDirectory()).map(d => d.name);
+            } catch (err) {
+              // No engineAlt folder yet
+            }
+            
+            for (const altDir of altDirs) {
+              const altFilePath = path.join(outputPluginPath, 'engineAlt', altDir, relativeEngineFile);
+              if (modifiedEngineAltFiles.has(`${relativeEngineFile}|${altDir}_${pluginInfo.plugin}`)) {
+                // File is in the modified list, skip it
+              log.info('File ' + relativeEngineFile + ' is modified in engineAlt/' + altDir + ' - skipping copy for compatibility');
+                continue;
+              }
+              try {
+                await fs.access(altFilePath);
+              } catch (err) {
+                // File doesn't exist in this alt folder
+                await fs.mkdir(path.dirname(altFilePath), { recursive: true });
+                await fs.copyFile(existingEngineFile, altFilePath);
+                log.info('Copied modified engine file to alt folder for compatibility: ' + altFilePath);
+              }
+            }
+          }       
         }
       }
     }
