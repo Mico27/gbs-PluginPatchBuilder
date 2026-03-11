@@ -618,7 +618,47 @@ ipcMain.handle('update-plugins', async (_, data) => {
           }
           // sort allPluginsCombinations alphabeticaly
           const allCombinations = generateCombinations(Array.from(allPluginsCombinations).sort());
-                        
+          
+          //iterate combinations again to create missing combinations folders and copy files from existing combinations that comprise this combination
+          for (const combination of allCombinations) {               
+            // Extract and sanitize plugin names
+            const pluginNames = combination.map(p => {
+              const parts = p.split(/[/\\]/);
+              return parts.pop();
+            });
+            const compatFolderName = pluginNames.join('_');
+            if (!existingAltDirs.includes(compatFolderName)) {
+              existingAltDirs.push(compatFolderName);
+              const newAltPath = path.join(engineAltBasePath, compatFolderName);
+              await fs.mkdir(newAltPath, { recursive: true });
+              //if this combination didnt exist before, copy the files from the existing combination that comprise this combination.
+              for (const plugin of combination) {
+                const parentCompatFolderName = pluginNames.filter(name => name !== plugin.split(/[/\\]/).pop()).join('_');
+                const parentCompatFolderPath = path.join(engineAltBasePath, parentCompatFolderName);
+                try {                  
+                  const parentFiles = await gatherFiles(parentCompatFolderPath);
+                  for (const parentFile of parentFiles) {
+                    const relativeParentFile = parentFile.substring(parentCompatFolderPath.length + 1);
+                    const targetFile = path.join(newAltPath, relativeParentFile);
+                    try {
+                      await fs.access(targetFile);
+                    } catch (err) {
+                      // File doesn't exist in current combination, copy it
+                      await fs.mkdir(path.dirname(targetFile), { recursive: true });
+                      await fs.copyFile(parentFile, targetFile);
+                      log.info('Copied file from existing combination ' + parentCompatFolderName + ' to new combination ' + compatFolderName + ': ' + relativeParentFile);
+                    }
+                  }
+                } catch (err) {
+                  // If parent combination doesn't exist, skip
+                  if (err.code !== 'ENOENT') {
+                    log.warn('Could not read parent combination folder ' + parentCompatFolderName + ': ' + err.message);
+                  }
+                }
+              }
+            }
+          }  
+
           // Reiterate combinations and copy .patch files from parent combinations
           for (const combination of allCombinations) {
             const pluginNames = combination.map(p => {
@@ -666,40 +706,7 @@ ipcMain.handle('update-plugins', async (_, data) => {
               }
             }
           }
-          //iterate combinations again to create missing combinations folders and copy files from existing combinations that comprise this combination
-          for (const combination of allCombinations) {               
-            // Extract and sanitize plugin names
-            const pluginNames = combination.map(p => {
-              const parts = p.split(/[/\\]/);
-              return parts.pop();
-            });
-            const compatFolderName = pluginNames.join('_');
-            if (!existingAltDirs.includes(compatFolderName)) {
-              existingAltDirs.push(compatFolderName);
-              const newAltPath = path.join(engineAltBasePath, compatFolderName);
-              await fs.mkdir(newAltPath, { recursive: true });
-              //if this combination didnt exist before, copy the files from the existing combination that comprise this combination.
-              for (const plugin of combination) {
-                const parentCompatFolderName = pluginNames.filter(name => name !== plugin.split(/[/\\]/).pop()).join('_');
-                const parentCompatFolderPath = path.join(engineAltBasePath, parentCompatFolderName);
-                try {                  
-                  const parentFiles = await gatherFiles(parentCompatFolderPath);
-                  for (const parentFile of parentFiles) {
-                    const relativeParentFile = parentFile.substring(parentCompatFolderPath.length + 1);
-                    const targetFile = path.join(newAltPath, relativeParentFile);
-                    await fs.mkdir(path.dirname(targetFile), { recursive: true });
-                    await fs.copyFile(parentFile, targetFile);
-                    log.info('Copied file from existing combination ' + parentCompatFolderName + ' to new combination ' + compatFolderName + ': ' + relativeParentFile);
-                  }
-                } catch (err) {
-                  // If parent combination doesn't exist, skip
-                  if (err.code !== 'ENOENT') {
-                    log.warn('Could not read parent combination folder ' + parentCompatFolderName + ': ' + err.message);
-                  }
-                }
-              }
-            }
-          }          
+                  
           // Copy all engine files that are not in any engineAlt folder
           const allExistingEngineFiles = await gatherFiles(path.join(outputPluginPath, 'engine'));
           for (const existingEngineFile of allExistingEngineFiles) {
