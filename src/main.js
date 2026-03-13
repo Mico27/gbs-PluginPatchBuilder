@@ -132,6 +132,15 @@ ipcMain.handle("update-plugins", async (_, data) => {
     }
   }
 
+  async function fileExists(filePath) {
+    try {
+      await fs.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // Generate all non-empty combinations of previousPlugins
   const generateCombinations = (arr) => {
     const result = [];
@@ -717,12 +726,7 @@ ipcMain.handle("update-plugins", async (_, data) => {
                   compatFolderName,
                   relative,
                 );
-                try {
-                  combinedPluginContent = await fs.readFile(
-                    combinedPluginContentPath,
-                    "utf8",
-                  );
-                } catch (err) {
+                if (!await fileExists(combinedPluginContentPath)) {
                   combinedPluginContent = pluginContent;
                   // Perform three-way merge: ours=new, base=previous, theirs=alt
                   const mergeResult = diff3.diff3Merge(
@@ -1058,6 +1062,166 @@ ipcMain.handle("update-plugins", async (_, data) => {
               }
             }
           }
+
+
+
+        }
+      }
+    }
+
+    const inputPluginFileMap = new Map(); // Map<filePath, Map<pluginName, content>>    
+    // check source engineAlt folders for file variations and create patches
+    for (const pluginInfo of allPlugins) {
+      const inputPluginPath = path.join(
+        pluginsFolder,
+        pluginInfo.author,
+        pluginInfo.plugin,
+      ); 
+      const outputPluginPath = path.join(
+        updatedPluginsFolderOutput,
+        pluginInfo.author,
+        pluginInfo.plugin,
+      );
+      //fill inputPluginFileMap with files from the base plugin for later comparison with engineAlt variants
+      const inputEnginePath = path.join(inputPluginPath, "engine");
+      const inputEngineAltPath = path.join(inputPluginPath, "engineAlt");
+      let inputEngineAltFolders = [];
+      try {
+        const altDirEntries = await fs.readdir(inputEngineAltPath, { withFileTypes: true });
+        inputEngineAltFolders = altDirEntries
+          .filter((d) => d.isDirectory())
+          .map((d) => d.name);
+      } catch (err) {
+        // No engineAlt folder, skip
+        continue;
+      }
+      try {
+          const inputEngineFiles = await gatherFiles(inputEnginePath);
+          for (const inputEngineFile of inputEngineFiles) {
+            const relative = inputEngineFile.substring(inputEnginePath.length + 1);
+            if (relative === "engine.json") {
+              continue;
+            }
+            const inputEngineFileContent = await fs.readFile(inputEngineFile, "utf8");
+            // Add to inputPluginFileMap for later comparison with engineAlt variants
+            if (!inputPluginFileMap.has(relative)) {
+              inputPluginFileMap.set(relative, new Map());
+            }
+            inputPluginFileMap.get(relative).set(pluginInfo.plugin, inputEngineFileContent);
+          }
+          for (const inputEngineAltFolder of inputEngineAltFolders){
+            const inputEngineAltFiles = await gatherFiles(path.join(inputEngineAltPath, inputEngineAltFolder));
+            for (const inputEngineFile of inputEngineAltFiles) {
+              const relative = inputEngineFile.substring(path.join(inputEngineAltPath, inputEngineAltFolder).length + 1);
+              if (relative === "engine.json") {
+                continue;
+              }
+              const inputEngineFileContent = await fs.readFile(inputEngineFile, "utf8");
+              // Add to inputPluginFileMap for later comparison with engineAlt variants
+              if (!inputPluginFileMap.has(relative)) {
+                inputPluginFileMap.set(relative, new Map());
+              }
+              inputPluginFileMap.get(relative).set(inputEngineAltFolder + "_" + pluginInfo.plugin, inputEngineFileContent);
+            }
+          }          
+      } catch (err) {
+        // No engineAlt folder, skip
+        continue;
+      }
+
+      
+      const outputEngineAltPath = path.join(outputPluginPath, "engineAlt");
+
+      let outputEngineAltFolders = [];
+      try {
+        const altDirEntries = await fs.readdir(outputEngineAltPath, { withFileTypes: true });
+        outputEngineAltFolders = altDirEntries
+          .filter((d) => d.isDirectory())
+          .map((d) => d.name);
+      } catch (err) {
+        // No engineAlt folder, skip
+        continue;
+      }
+
+      for (const altFolderName of outputEngineAltFolders) {
+        const inputAltFolderPath = path.join(inputEngineAltPath, altFolderName);
+        const outputAltFolderPath = path.join(outputEngineAltPath, altFolderName);
+        
+        try {
+          const allPluginFiles = inputPluginFileMap.keys();
+          for (const relative of allPluginFiles) {
+            const outputAltFilePath = path.join(outputAltFolderPath, relative);
+            
+            // Skip engine.json and .patch files
+            if (
+              relative === "engine.json" ||
+              relative.endsWith(".patch")
+            ) {
+              continue;
+            }
+            
+            // Skip if a patch was already done for that file or if the file already exist in output
+            if (await fileExists(outputAltFilePath + ".patch") || !inputPluginFileMap.has(relative)) {
+              continue;
+            }
+
+            const currentFileMap = inputPluginFileMap.get(relative);
+            let adjustedFileContent = null;            
+            //split altFolderName into array by "_"
+            const altFolders = altFolderName.split('_');
+            const combinations = generateCombinations(altFolders).reverse();
+            for (const combination of combinations){
+              let adjustedAltFolderName = combination.join('_') + "_" + pluginInfo.plugin; 
+              if (currentFileMap.has(adjustedAltFolderName)){
+                adjustedFileContent = currentFileMap.get(adjustedAltFolderName);
+                break;                             
+              }
+            }
+            let baseFileContent = null;
+            if (adjustedFileContent){
+              for (const combination of combinations){
+                let baseAltFolderName = combination.join('_'); 
+                if (currentFileMap.has(baseAltFolderName)){
+                  baseFileContent = currentFileMap.get(baseAltFolderName);
+                  break;                             
+                }
+              }
+              if (!baseFileContent){
+                if (currentFileMap.has(pluginInfo.plugin)){
+                  // since this is an alt of a file within the plugin, we just copy adjustedFileContent instead of patching
+                  const outPath = path.join(outputAltFolderPath, relative);
+                  await fs.mkdir(path.dirname(outPath), { recursive: true });
+                  await fs.writeFile(outPath, adjustedFileContent);
+                  continue;
+                }
+              }
+            }
+            if (adjustedFileContent && baseFileContent &&
+              baseFileContent != adjustedFileContent) {
+              //the adjustedFileContent is from a different alt folder than the current alt folder, we need to create a patch from the adjustedFileContent to the current alt file and save it to outputAltFilePath + ".patch"
+              //create patch from existingFileContent and inputAltFilePath content, and save it to outputAltFilePath + ".patch"
+              const normalizedBaseFileContent = normalizeWhitespace(baseFileContent);
+              const normalizedAdjustedFileContent = normalizeWhitespace(adjustedFileContent);                
+              const patchText = jsdiff.createPatch(
+                relative,
+                normalizedBaseFileContent,
+                normalizedAdjustedFileContent,
+              );
+              const patchPath = path.join(outputAltFolderPath, relative + ".patch");
+              await fs.mkdir(path.dirname(patchPath), { recursive: true });
+              await fs.writeFile(patchPath, patchText, "utf8");
+
+              if (await fileExists(outputAltFilePath)){
+                //if outPutAltFilePath already exist, delete it
+                await fs.rm(outputAltFilePath);
+              }
+              log.info(
+                `Created patch for engineAlt file ${relative} in alt folder ${altFolderName}`
+              );
+            }            
+          }
+        } catch (err) {
+          log.warn(`Could not read engineAlt folder ${altFolderName}: ${err.message}`);
         }
       }
     }
