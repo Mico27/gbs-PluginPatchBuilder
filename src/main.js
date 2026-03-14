@@ -65,6 +65,36 @@ ipcMain.handle("update-plugins", async (_, data) => {
   const fs = require("fs").promises;
   const path = require("path");
 
+  // Helper function to prevent folder name to be an invalid name like CON, NUL, PRN, etc... which would cause fs operations to fail on Windows
+  const isIllegalFolderName = (name) => {
+    const invalidNames = [
+      "CON",
+      "PRN",
+      "AUX",
+      "NUL",
+      "COM1",
+      "COM2",
+      "COM3",
+      "COM4",
+      "COM5",
+      "COM6",
+      "COM7",
+      "COM8",
+      "COM9",
+      "LPT1",
+      "LPT2",
+      "LPT3",
+      "LPT4",
+      "LPT5",
+      "LPT6",
+      "LPT7",
+      "LPT8",
+      "LPT9",
+    ];
+    return (invalidNames.includes(name.toUpperCase()));
+  };
+
+
   // Normalize whitespace in text content
   const normalizeWhitespace = (content) => {
     return content.replace(/\r\n/g, "\n");
@@ -920,6 +950,40 @@ ipcMain.handle("update-plugins", async (_, data) => {
               for (const engineAltFolder of engineAltFolders) {
                 // Parse the folder name to extract plugin names
                 const pluginNames = engineAltFolder.split("_");
+                // Minimize engineAltFolder name by abbreviating plugin names with minimal unique prefixes
+                // (e.g. "ConfigLoadSavePlugin_MetaTilePlugin" -> "Co_Me") for cleaner rule definitions
+                const abbreviatedPluginNames = pluginNames.map((name) => {
+                  // Try progressively longer prefixes until we find one that's unique among this combination
+                  for (let len = 1; len <= name.length; len++) {
+                    const prefix = name.substring(0, len);
+                    // Check if any OTHER plugin name in this combination would have the same prefix
+                    const conflict = allPlugins.some((otherPlugin) => {
+                      return otherPlugin.plugin !== name && otherPlugin.plugin.substring(0, len) === prefix;
+                    });
+
+                    if (!conflict && !isIllegalFolderName(prefix)) {
+                      return prefix;
+                    }
+                  }
+                  // Fallback to full name if no unique prefix found
+                  return name;
+                });
+                const abbreviatedEngineAltFolder = abbreviatedPluginNames.join("_");
+                //rename engineAltFolder to abbreviatedEngineAltFolder
+                const oldPath = path.join(engineAltPath, engineAltFolder);
+                const newPath = path.join(engineAltPath, abbreviatedEngineAltFolder);
+                try {
+                  await fs.rename(oldPath, newPath);
+                } catch (err) {
+                  log.warn(
+                    "Could not rename engineAlt folder for " +
+                      pluginInfo.fullName +
+                      ": " +
+                      err.message,
+                  );
+                  abbreviatedEngineAltFolder = engineAltFolder; // fallback to original name if rename fails
+                }
+
 
                 // Create a rule for this combination
                 const rule = {
@@ -929,7 +993,7 @@ ipcMain.handle("update-plugins", async (_, data) => {
                       return `Mico27/${name}`;
                     }),
                   },
-                  use: engineAltFolder,
+                  use: abbreviatedEngineAltFolder,
                 };
                 pluginJson.engineAltRules.push(rule);
 
@@ -939,7 +1003,7 @@ ipcMain.handle("update-plugins", async (_, data) => {
                     when: {
                       additionalPlugins: pluginNames,
                     },
-                    use: engineAltFolder,
+                    use: abbreviatedEngineAltFolder,
                   });
                 }
               }
