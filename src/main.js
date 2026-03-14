@@ -1069,6 +1069,7 @@ ipcMain.handle("update-plugins", async (_, data) => {
       }
     }
 
+    const baseEngineFileMap = new Map();
     const inputPluginFileMap = new Map(); // Map<filePath, Map<pluginName, content>>    
     // check source engineAlt folders for file variations and create patches
     for (const pluginInfo of allPlugins) {
@@ -1092,10 +1093,20 @@ ipcMain.handle("update-plugins", async (_, data) => {
           .filter((d) => d.isDirectory())
           .map((d) => d.name);
       } catch (err) {
-        // No engineAlt folder, skip
-        continue;
       }
       try {
+        //fill inputPluginFileMap with files from the base engine folder
+          const engineFiles = await gatherFiles(baseFolder);
+          for (const engineFile of engineFiles) {
+            const relative = engineFile.substring(baseFolder.length + 1);
+            if (relative === "engine.json") {
+              continue;
+            }
+            const engineFileContent = await fs.readFile(engineFile, "utf8");
+            // Add to baseEngineFileMap for later comparison with engineAlt variants
+            baseEngineFileMap.set(relative, engineFileContent);
+          }
+        //fill inputPluginFileMap with files from the plugin engine folder
           const inputEngineFiles = await gatherFiles(inputEnginePath);
           for (const inputEngineFile of inputEngineFiles) {
             const relative = inputEngineFile.substring(inputEnginePath.length + 1);
@@ -1109,6 +1120,7 @@ ipcMain.handle("update-plugins", async (_, data) => {
             }
             inputPluginFileMap.get(relative).set(pluginInfo.plugin, inputEngineFileContent);
           }
+          //fill inputPluginFileMap with files from the plugin engineAlt folders
           for (const inputEngineAltFolder of inputEngineAltFolders){
             const inputEngineAltFiles = await gatherFiles(path.join(inputEngineAltPath, inputEngineAltFolder));
             for (const inputEngineFile of inputEngineAltFiles) {
@@ -1150,6 +1162,9 @@ ipcMain.handle("update-plugins", async (_, data) => {
         try {
           const allPluginFiles = inputPluginFileMap.keys();
           for (const relative of allPluginFiles) {
+            if (relative === "src\\core\\data_manager.c"){
+              log.info(`Checking file ${relative} in alt folder ${altFolderName} for plugin ${pluginInfo.fullName}`);
+            }
             const outputAltFilePath = path.join(outputAltFolderPath, relative);
             
             // Skip engine.json and .patch files
@@ -1159,26 +1174,26 @@ ipcMain.handle("update-plugins", async (_, data) => {
             ) {
               continue;
             }
-            
+            //await fileExists(outputAltFilePath + ".patch")
             // Skip if a patch was already done for that file or if the file already exist in output
-            if (await fileExists(outputAltFilePath + ".patch") || !inputPluginFileMap.has(relative)) {
+            if (!inputPluginFileMap.has(relative)) {
               continue;
             }
 
             const currentFileMap = inputPluginFileMap.get(relative);
-            let adjustedFileContent = null;            
+            let newFileContent = null;
+            let baseFileContent = null;
             //split altFolderName into array by "_"
             const altFolders = altFolderName.split('_');
             const combinations = generateCombinations(altFolders).reverse();
             for (const combination of combinations){
               let adjustedAltFolderName = combination.join('_') + "_" + pluginInfo.plugin; 
               if (currentFileMap.has(adjustedAltFolderName)){
-                adjustedFileContent = currentFileMap.get(adjustedAltFolderName);
+                newFileContent = currentFileMap.get(adjustedAltFolderName);
                 break;                             
               }
-            }
-            let baseFileContent = null;
-            if (adjustedFileContent){
+            }            
+            if (newFileContent){
               for (const combination of combinations){
                 let baseAltFolderName = combination.join('_'); 
                 if (currentFileMap.has(baseAltFolderName)){
@@ -1187,21 +1202,24 @@ ipcMain.handle("update-plugins", async (_, data) => {
                 }
               }
               if (!baseFileContent){
-                if (currentFileMap.has(pluginInfo.plugin)){
-                  // since this is an alt of a file within the plugin, we just copy adjustedFileContent instead of patching
-                  const outPath = path.join(outputAltFolderPath, relative);
-                  await fs.mkdir(path.dirname(outPath), { recursive: true });
-                  await fs.writeFile(outPath, adjustedFileContent);
-                  continue;
+                if (baseEngineFileMap.has(relative)){
+                  baseFileContent = baseEngineFileMap.get(relative);
+                } else {
+                  if (currentFileMap.has(pluginInfo.plugin)){
+                    // since this is an alt of a file within the plugin, we just copy adjustedFileContent instead of patching
+                    const outPath = path.join(outputAltFolderPath, relative);
+                    await fs.mkdir(path.dirname(outPath), { recursive: true });
+                    await fs.writeFile(outPath, newFileContent);
+                    continue;
+                  }
                 }
               }
             }
-            if (adjustedFileContent && baseFileContent &&
-              baseFileContent != adjustedFileContent) {
+            if (newFileContent && baseFileContent) {
               //the adjustedFileContent is from a different alt folder than the current alt folder, we need to create a patch from the adjustedFileContent to the current alt file and save it to outputAltFilePath + ".patch"
               //create patch from existingFileContent and inputAltFilePath content, and save it to outputAltFilePath + ".patch"
               const normalizedBaseFileContent = normalizeWhitespace(baseFileContent);
-              const normalizedAdjustedFileContent = normalizeWhitespace(adjustedFileContent);                
+              const normalizedAdjustedFileContent = normalizeWhitespace(newFileContent);                
               const patchText = jsdiff.createPatch(
                 relative,
                 normalizedBaseFileContent,
@@ -1215,6 +1233,7 @@ ipcMain.handle("update-plugins", async (_, data) => {
                 //if outPutAltFilePath already exist, delete it
                 await fs.rm(outputAltFilePath);
               }
+              currentFileMap.set(altFolderName + "_" + pluginInfo.plugin, newFileContent);
               log.info(
                 `Created patch for engineAlt file ${relative} in alt folder ${altFolderName}`
               );

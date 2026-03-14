@@ -127,7 +127,8 @@ class PluginOutputValidator {
   /**
    * Recursively copy directory
    */
-  async copyDir(src, dest, excludePaths = []) {
+  async copyDir(src, dest, excludeFileTypes = []) {
+
     const entries = await fs.readdir(src, { withFileTypes: true });
     await fs.mkdir(dest, { recursive: true });
 
@@ -135,13 +136,9 @@ class PluginOutputValidator {
       const srcPath = path.join(src, entry.name);
       const destPath = path.join(dest, entry.name);
 
-      if (excludePaths.some((exclude) => srcPath.startsWith(exclude))) {
-        continue;
-      }
-
       if (entry.isDirectory()) {
-        await this.copyDir(srcPath, destPath, excludePaths);
-      } else {
+        await this.copyDir(srcPath, destPath, excludeFileTypes);
+      } else if (!excludeFileTypes.some((pattern) => entry.name.endsWith(pattern))){
         await fs.copyFile(srcPath, destPath);
       }
     }
@@ -256,8 +253,13 @@ class PluginOutputValidator {
       //prepare engine copy for this combination test
       const reset = await this.copyEngineToTemp();
       if (!reset) {
-        this.logger.error(`❌ Failed to reset engine`);
-        return false;
+        //wait a second and try again
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const resetRetry = await this.copyEngineToTemp();
+        if (!resetRetry) {
+          this.logger.error(`❌ Failed to reset engine after retry`);
+          return false;
+        }
       }
       this.logger.info(`\nTesting combination: ${combination.join("\n")}`);
       for (const plugin of combination) {
@@ -269,15 +271,26 @@ class PluginOutputValidator {
         );
         //Copy pluginPath (excluding .patch files) in tempEngineFolder.
         await this.copyDir(enginePath, this.tempEngineFolder, [
-          path.join(enginePath, "*.patch"),
+          ".patch",
         ]);
+      }
+      for (const plugin of combination) {
+        const pluginPath = path.join(this.updatedPluginsFolderOutput, plugin);
+        //get which engineAltRules this plugin has that match this combination (to log which rules are being tested)
+        const enginePath = await this.getPluginEnginePathToUse(
+          pluginPath,
+          combination,
+        );
         //Get all .patch files within enginePath recursively
-
         const patchFiles = await this.getPatchFilesRecursively(enginePath);
+        let relativePatchPath = "";
         for (const patchFilePath of patchFiles) {
           try {
             const patchContent = await fs.readFile(patchFilePath, "utf8");
-            const relativePatchPath = path.relative(enginePath, patchFilePath);
+            relativePatchPath = path.relative(enginePath, patchFilePath);
+            if (relativePatchPath === "src\\core\\load_save.c.patch"){
+              this.logger.info(`Testing plugin ${plugin} with patch ${relativePatchPath} (this patch is known to fail if not applied before other patches, testing order of patch application)`);
+            }
             const targetFilePath = path.join(
               this.tempEngineFolder,
               relativePatchPath.replace(".patch", ""),
