@@ -73,10 +73,10 @@ The application window will open automatically.
 Use this when GBStudio releases a new version and you need to update your plugins.
 
 1. Select **Engine update** from the dropdown
-2. Choose your **Previous Engine Folder** (old GBStudio version)
-3. Choose your **New Engine Folder** (new GBStudio version)
-4. Choose your **Plugins Source Folder**
-5. Choose an **Output Folder**
+2. Choose your **Previous Engine Folder** (old GBStudio version) (make sure that the folder selected is "engine" and contains "src" and "includes" folder within)
+3. Choose your **New Engine Folder** (new GBStudio version) (make sure that the folder selected is "engine" and contains "src" and "includes" folder within)
+4. Choose your **Plugins Source Folder** (this folder contains all the plugins you want to update, starting by author name. ex: PlusingSourceFolder/Mico27/MetatilePlugin)
+5. Choose an **Output Folder** (this is where the updated plugin will be copied into, the folder is cleaned before the process)
 6. Click **Update**
 
 **Result**: Updated plugins with merged changes in output folder. Any conflicts are logged to `patch_conflicts.log`.
@@ -88,9 +88,9 @@ Use this when GBStudio releases a new version and you need to update your plugin
 Use this when you manually edit plugin source code and want to sync changes to compatibility variants.
 
 1. Select **Plugin update** from the dropdown
-2. Choose your **Previous Plugin Folder**
-3. Choose your **New Plugin Folder** (with your edits)
-4. Choose an **Output Folder**
+2. Choose your **Previous Plugin Folder** (this folder contains all the plugins before the update, starting by author name. ex: PlusingSourceFolder/Mico27/MetatilePlugin)
+3. Choose your **New Plugin Folder** (with your edits) (this folder contains all the plugins you want to update, starting by author name. ex: PlusingSourceFolder/Mico27/MetatilePlugin)
+4. Choose an **Output Folder** (this is where the updated plugin will be copied into, the folder is cleaned before the process)
 5. Click **Update**
 
 **Result**: Updated plugins with engineAlt variants synchronized to your changes.
@@ -102,9 +102,9 @@ Use this when you manually edit plugin source code and want to sync changes to c
 Use this to generate `.patch` files for sharing or contributing plugins.
 
 1. Select **Create patches** from the dropdown
-2. Choose your **Engine Folder** (baseline)
-3. Choose your **Plugins Source Folder**
-4. Choose an **Output Folder**
+2. Choose your **Engine Folder** (baseline) (make sure that the folder selected is "engine" and contains "src" and "includes" folder within)
+3. Choose your **Plugins Source Folder** (this folder contains all the plugins you want to patch, starting by author name. ex: PlusingSourceFolder/Mico27/MetatilePlugin)
+4. Choose an **Output Folder** (this is where the updated plugin will be copied into, the folder is cleaned before the process)
 5. **(Optional)** Enable "Generate EngineAlt For Plugin Inter-compatibility"
 6. **(Optional)** Enable "Test applying patches after creation"
 7. Click **Update**
