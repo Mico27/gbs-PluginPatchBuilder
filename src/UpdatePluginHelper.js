@@ -1,17 +1,51 @@
 export const UpdatePluginHelper = {
-  updatePlugins: async (data) => {
+  engineUpdate: async (data) => {
     console.log("Updating with folders:", data);
-    if (window.electronAPI && window.electronAPI.updatePlugins) {
+    if (window.electronAPI && window.electronAPI.engineUpdate) {
       try {
-        const result = await window.electronAPI.updatePlugins(data);
-        console.log("updatePlugins result:", result);
+        const result = await window.electronAPI.engineUpdate(data);
+        console.log("engineUpdate result:", result);
         return result;
       } catch (err) {
-        console.error("error during updatePlugins ipc call", err);
+        console.error("error during engineUpdate ipc call", err);
         throw err;
       }
     } else {
-      console.warn("IPC updatePlugins not available");
+      console.warn("IPC engineUpdate not available");
+      return { success: false };
+    }
+  },
+
+  updatePluginSources: async (data) => {
+    console.log("Updating with folders:", data);
+    if (window.electronAPI && window.electronAPI.updatePluginSources) {
+      try {
+        const result = await window.electronAPI.updatePluginSources(data);
+        console.log("updatePluginSources result:", result);
+        return result;
+      } catch (err) {
+        console.error("error during updatePluginSources ipc call", err);
+        throw err;
+      }
+    } else {
+      console.warn("IPC updatePluginSources not available");
+      return { success: false };
+    }
+  },
+
+  createPatches: async (data) => {
+    console.log("Creating patches with folders:", data);
+    if (window.electronAPI && window.electronAPI.createPatches) {
+      try {
+        const result = await window.electronAPI.createPatches(data);
+        console.log("createPatches result:", result);
+        return result;
+      } catch (err) {
+        console.error("error during createPatches ipc call", err);
+        throw err;
+      }
+    } else {
+      console.warn("IPC createPatches not available");
       return { success: false };
     }
   },

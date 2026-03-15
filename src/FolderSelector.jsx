@@ -7,6 +7,13 @@ export const FolderSelector = ({ label, folder, onChange }) => {
       onChange(path);
     }
   };
+
+  const handleOpen = async () => {
+    if (folder) {
+      await window.electronAPI.openFolder(folder);
+    }
+  };
+
   return (
     <div className="folder-selector-container">
       <label className="folder-selector-label">
@@ -27,6 +34,14 @@ export const FolderSelector = ({ label, folder, onChange }) => {
           className="folder-selector-button"
         >
           Browse
+        </button>
+        <button
+          onClick={handleOpen}
+          disabled={!folder}
+          className="folder-selector-button"
+          title="Open folder in file explorer"
+        >
+          Open
         </button>
       </div>
     </div>
