@@ -1,13 +1,13 @@
 # GBStudio Plugin Patcher
 
-A powerful desktop application for managing, updating, and validating GBStudio plugins with automatic three-way merge support and patch generation.
+Desktop application for managing, updating, and validating GBStudio plugins with automatic three-way merge support and patch generation.
 
 ![GBStudio Plugin Patcher](./assets/dev.gbstudio.gb-studio.ico)
 
 ## Features
 
 ### 🔄 **Engine Update Mode**
-When updating to a new GBStudio version, intelligently merge changes into existing plugins using three-way merge algorithm.
+When updating to a new GBStudio version, merge changes into existing plugins using three-way merge algorithm.
 
 - Compares previous and new engine versions
 - Automatically applies engine updates to plugin files
@@ -31,18 +31,6 @@ Generate `.patch` files for plugins with automatic compatibility handling.
 - Creates minimal, unique folder abbreviations (e.g., "Co_Me" for ConfigLoadSavePlugin_MetaTilePlugin)
 - Auto-generates engineAltRules in plugin.json
 - Optional patch validation before completion
-
-### ✨ Additional Features
-
-- 📝 Real-time progress tracking during operations
-- 🔍 Detailed conflict reporting with context
-- 📂 Quick folder access with integrated file explorer buttons
-- ⚙️ Form validation - Update button disabled until all required fields filled
-- 🧪 Automatic patch testing and validation
-- 📋 Comprehensive operation logs
-- 🎨 Blueprint-themed dark UI
-
----
 
 ## Quick Start
 
