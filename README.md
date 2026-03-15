@@ -2,8 +2,6 @@
 
 Desktop application utility tool for managing, updating, and validating GBStudio plugins with automatic three-way merge support and patch generation.
 
-![GBStudio Plugin Patcher](./assets/dev.gbstudio.gb-studio.ico)
-
 ## Features
 
 ### 🔄 **Engine Update Mode**
