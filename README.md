@@ -1,6 +1,6 @@
 # GBStudio Plugin Patcher
 
-Desktop application for managing, updating, and validating GBStudio plugins with automatic three-way merge support and patch generation.
+Desktop application utility tool for managing, updating, and validating GBStudio plugins with automatic three-way merge support and patch generation.
 
 ![GBStudio Plugin Patcher](./assets/dev.gbstudio.gb-studio.ico)
 
@@ -123,6 +123,8 @@ Check `patch_conflicts.log` in the output folder for conflict details. You'll ne
 
 ### "Patch fails to apply"
 Means that the patch during automatic validation of patches failed to apply, usualy due to a faulty patch generated from lack of a manually combined plugin source file.
+
+Let me know on the GB Studio discord if you have any other question or problems with this utility tool.
 
 ---
 
