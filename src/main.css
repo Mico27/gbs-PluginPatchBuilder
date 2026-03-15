@@ -192,6 +192,8 @@ body {
   background: var(--blueprint-input-bg);
   color: var(--blueprint-text-button);
   transition: all 0.2s ease;
+  text-align: right;
+  direction: rtl;
 }
 
 .folder-selector-input::placeholder {
