@@ -1,28 +1,47 @@
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
+const { MakerAppImage } = require("@reforged/maker-appimage");
 
 module.exports = {
   packagerConfig: {
     asar: true,
     icon: './assets/app_icon',
+    name: "GB Studio Plugin Patcher",
+    executableName: "gb-studio-plugin-patcher",
   },
   rebuildConfig: {},
   makers: [
+    // Windows Installer (traditional setup.exe experience)
     {
       name: '@electron-forge/maker-squirrel',
-      config: {},
+      config: {
+        setupIcon: './assets/app_icon.ico',
+      },
     },
+    // Standalone Zip files for all platforms (portable, no installation needed)
     {
       name: '@electron-forge/maker-zip',
-      platforms: ['darwin'],
+      platforms: ['darwin', 'win32', 'linux'],
     },
+    // Linux AppImage format
+    new MakerAppImage({}),
+    // Linux Debian package
     {
       name: '@electron-forge/maker-deb',
-      config: {},
+      config: {
+        options: { 
+          icon: './assets/app_icon.png',
+        },
+      },
     },
+    // Linux RPM package
     {
       name: '@electron-forge/maker-rpm',
-      config: {},
+      config: {
+        options: { 
+          icon: './assets/app_icon.png',
+        },
+      },
     },
   ],
   plugins: [
@@ -60,5 +79,19 @@ module.exports = {
       [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
       [FuseV1Options.OnlyLoadAppFromAsar]: true,
     }),
+  ],
+  publishers: [
+    {
+      name: '@electron-forge/publisher-github',
+      config: {
+        repository: {
+          owner: 'Mico27',
+          name: 'gbs-PluginPatchBuilder',
+        },
+        prerelease: false,
+        generateReleaseNotes: true,
+
+      },
+    },
   ],
 };
