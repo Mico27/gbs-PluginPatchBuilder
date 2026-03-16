@@ -1015,6 +1015,35 @@ ipcMain.handle("create-patches", async (_, data) => {
     return result;
   };
 
+  // Function to reorder plugin list based on "order" field in the plugin.json file if it exists. The "order" field is expected to be an integer, and plugins with lower order values should come first. If the field is missing, assume order = 0.
+  const reorderPlugins = async (plugins) => {
+    const pluginsWithOrder = [];
+    for (const pluginInfo of plugins) {
+      const pluginJsonPath = path.join(
+        pluginsFolder,
+        pluginInfo.author,
+        pluginInfo.plugin,
+        "plugin.json",
+      );
+      let order = 0;
+      if (await fileExists(pluginJsonPath)) {
+        try {          
+          const pluginJsonContent = await fs.readFile(pluginJsonPath, "utf8");
+          const pluginJson = JSON.parse(pluginJsonContent);
+          if (typeof pluginJson.order === "number") {
+            order = pluginJson.order;
+          }
+        } catch (err) {
+          log.warn(`Failed to read or parse plugin.json for ${pluginInfo.fullName}: ${err}`);
+        }
+      }
+      pluginsWithOrder.push({ ...pluginInfo, order });
+    }
+    // Sort plugins by order, then by fullName
+    pluginsWithOrder.sort((a, b) => a.order - b.order || a.fullName.localeCompare(b.fullName));
+    return pluginsWithOrder;
+  };
+
   try {
     let conflicts = [];
     const win = BrowserWindow.getAllWindows()[0];
@@ -1025,7 +1054,7 @@ ipcMain.handle("create-patches", async (_, data) => {
       .map((d) => d.name)
       .sort();
 
-    const allPlugins = [];
+    let allPlugins = [];
     for (const authorName of sortedAuthors) {
       const authorPath = path.join(pluginsFolder, authorName);
       const pluginDirs = await fs.readdir(authorPath, {
@@ -1042,7 +1071,13 @@ ipcMain.handle("create-patches", async (_, data) => {
     }
 
     // Sort all plugins alphabetically by full name (author/plugin)
-    allPlugins.sort((a, b) => a.fullName.localeCompare(b.fullName));
+    allPlugins = await reorderPlugins(allPlugins);
+
+    // create a Map to track the order of the plugins based on the sorted list, to be used later when generating compatibility patches for engineAlt folders
+    const pluginOrderMap = new Map(); // Map<plugin, order>
+    for (const pluginInfo of allPlugins) {
+      pluginOrderMap.set(pluginInfo.plugin, pluginInfo.order);
+    }
 
     // If engine didn't change, just copy plugins and prepare for patch creation
     const baseEngineFileMap = new Map();
@@ -1151,7 +1186,7 @@ ipcMain.handle("create-patches", async (_, data) => {
       const outputEnginePath = path.join(outputPluginPath, "engine");
       //Copy inputPluginPath to outputPluginPath
       try {
-        await copyDir(inputPluginPath, outputPluginPath, (!createEngineAlts)?[inputEngineAltPath]:[]);
+        await copyDir(inputPluginPath, outputPluginPath, [inputEngineAltPath]);
       } catch (err) {
         log.warn(
           `Could not copy engine folder for ${pluginInfo.fullName}: ${err.message}`,
@@ -1227,31 +1262,29 @@ ipcMain.handle("create-patches", async (_, data) => {
           }
         }
         if (pluginDependencies.size == 0) {
+          //No dependencies with other plugins, no need to create engineAlt folders
           continue;
         }
+        //STEP 4: check for engineAlt variants and create patch files for them if needed.
+        //sort pluginDependencies based on the order of the plugins in the allPlugins list
+        let outputEngineAltFolders = [];
+        const pluginDependenciesArray = Array.from(pluginDependencies);
+        pluginDependenciesArray.sort((a, b) => {
+          const orderA = pluginOrderMap.get(a) || 0;
+          const orderB = pluginOrderMap.get(b) || 0;
+          return orderA - orderB;
+        });
         const pluginCombinations = generateCombinations(
-          Array.from(pluginDependencies).sort(),
+          pluginDependenciesArray,
         );
         for (const combination of pluginCombinations) {
           let engineAltFolderName = combination.join("_");
           await fs.mkdir(path.join(outputEngineAltPath, engineAltFolderName), {
             recursive: true,
           });
+          outputEngineAltFolders.push(engineAltFolderName);
         }
 
-        //STEP 4: check for engineAlt variants and create patch files for them if needed.
-        let outputEngineAltFolders = [];
-        try {
-          const altDirEntries = await fs.readdir(outputEngineAltPath, {
-            withFileTypes: true,
-          });
-          outputEngineAltFolders = altDirEntries
-            .filter((d) => d.isDirectory())
-            .map((d) => d.name);
-        } catch (err) {
-          // No engineAlt folder, skip.
-          continue;
-        }
         for (const altFolderName of outputEngineAltFolders) {
           const outputAltFolderPath = path.join(
             outputEngineAltPath,
@@ -1481,8 +1514,8 @@ ipcMain.handle("create-patches", async (_, data) => {
             const rule = {
               when: {
                 additionalPlugins: pluginNames.map((name) => {
-                  // Try with Mico27 author first, then just the name
-                  return `Mico27/${name}`;
+                  // Try with plugin author first, then just the name
+                  return `${pluginInfo.author}/${name}`;
                 }),
               },
               use: abbreviatedEngineAltFolder,

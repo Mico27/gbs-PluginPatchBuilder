@@ -100,7 +100,33 @@ class PluginOutputValidator {
         }
       }
 
-      return referencedPlugins;
+      //sort referencedPlugins by the "order" field within the plugin.json of the plugin (if the plugin doesn't have an "order" field, treat it as 0)
+      const pluginOrderMap = new Map();
+      for (const plugin of allPlugins) {
+        const pluginPath = path.join(
+          this.updatedPluginsFolderOutput,
+          plugin.author,
+          plugin.name,
+        );
+        const pluginJsonPath = path.join(pluginPath, "plugin.json");
+        try {
+          const pluginJsonContent = await fs.readFile(pluginJsonPath, "utf8");
+          const pluginJson = JSON.parse(pluginJsonContent);
+          const order = pluginJson.order || 0;
+          pluginOrderMap.set(`${plugin.author}/${plugin.name}`, order);
+        } catch (err) {
+          pluginOrderMap.set(`${plugin.author}/${plugin.name}`, 0);
+        }
+      }
+      const sortedReferencedPlugins = Array.from(referencedPlugins).sort(
+        (a, b) => {
+          const orderA = pluginOrderMap.get(a) || 0;
+          const orderB = pluginOrderMap.get(b) || 0;
+          return orderA - orderB;
+        },
+      );
+
+      return new Set(sortedReferencedPlugins);
     } catch (err) {
       this.logger.error(`Failed to extract referenced plugins: ${err.message}`);
       return new Set();
@@ -232,7 +258,7 @@ class PluginOutputValidator {
 
     //Generate all combinations of plugins to test together (for engineAltRules that require multiple plugins)
     const combinations = generateCombinations(
-      Array.from(referencedPlugins).sort(),
+      Array.from(referencedPlugins),
     );
     const combinationsCounted = combinations.length;
     this.logger.info(
@@ -315,11 +341,11 @@ class PluginOutputValidator {
             if (win) {
               win.webContents.send("update-progress", {
                 plugin: `ERROR `,
-                file: `❌ Failed to apply patch: ${relativePatchPath} for plugin ${plugin}: ${err.message}`,
+                file: `❌ Failed to apply patch: ${patchFilePath} for plugin ${plugin}: ${err.message}`,
               });
             }
             this.logger.error(
-              `❌ Failed to apply patch: ${relativePatchPath} for plugin ${plugin}: ${err.message}`,
+              `❌ Failed to apply patch: ${patchFilePath} for plugin ${plugin}: ${err.message}`,
             );
             return false;
           }
